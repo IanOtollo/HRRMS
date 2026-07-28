@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #F7F5F0;
+    --foreground: #151B23;
+
+    --card: #ffffff;
+    --card-foreground: #151B23;
+
+    --popover: #ffffff;
+    --popover-foreground: #151B23;
+
+    --primary: #1E7A46;
+    --primary-foreground: #ffffff;
+
+    --secondary: #EFEBE2;
+    --secondary-foreground: #151B23;
+
+    --muted: #E2DCCE;
+    --muted-foreground: #5B6472;
+
+    --accent: #E2DCCE;
+    --accent-foreground: #151B23;
+
+    --destructive: #A13D2B;
+    --destructive-foreground: #ffffff;
+
+    --border: #E2DCCE;
+    --input: #E2DCCE;
+    --ring: #14467B;
+
+    --radius: 4px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-paper-200;
+  }
+  body {
+    @apply bg-paper-50 text-text-primary;
+  }
+}
+
+/* Ensure focus ring matches specs */
+*:focus-visible {
+  outline: 2px solid theme('colors.county.blue.DEFAULT');
+  outline-offset: 2px;
+}
