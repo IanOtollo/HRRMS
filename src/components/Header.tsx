@@ -1,12 +1,28 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Search, LogOut, Menu, Plus } from "lucide-react";
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuthActions } from "@convex-dev/auth/react";
+import NotificationBell from "@/components/NotificationBell";
 
-export default function Header() {
+type CurrentUser = {
+  name?: string;
+  email?: string;
+  role?: string;
+} | null | undefined;
+
+export default function Header({
+  currentUser,
+  onMenuClick,
+}: {
+  currentUser?: CurrentUser;
+  onMenuClick?: () => void;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuthActions();
   const [searchQuery, setSearchQuery] = useState("");
 
   const breadcrumbs = pathname
@@ -14,10 +30,30 @@ export default function Header() {
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1));
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/employees?search=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/login");
+  };
+
   return (
-    <header className="h-16 bg-white border-b border-paper-200 sticky top-0 z-10 flex items-center justify-between px-4 md:px-8">
-      <div className="flex items-center min-w-0">
-        <div className="hidden md:flex text-text-secondary text-sm font-medium truncate mr-8">
+    <header className="print:hidden h-16 bg-white border-b border-paper-200 sticky top-0 z-10 flex items-center justify-between px-3 sm:px-4 md:px-8 gap-2">
+      <div className="flex items-center min-w-0 flex-1 gap-2 sm:gap-3">
+        <button
+          onClick={onMenuClick}
+          className="md:hidden shrink-0 text-text-secondary hover:text-text-primary transition-colors p-1.5 -ml-1.5"
+          aria-label="Open menu"
+        >
+          <Menu size={22} />
+        </button>
+
+        <div className="hidden lg:flex text-text-secondary text-sm font-medium truncate mr-4 shrink-0">
           <Link href="/dashboard" className="hover:text-county-blue transition-colors">Home</Link>
           {breadcrumbs.map((crumb, idx) => (
             <span key={idx} className="flex items-center">
@@ -28,35 +64,39 @@ export default function Header() {
             </span>
           ))}
         </div>
-        
-        <div className="relative w-full max-w-[360px]">
+
+        <form onSubmit={handleSearch} className="relative min-w-0 flex-1 max-w-[360px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
           <input
             type="text"
-            placeholder="Search name, P/F No, National ID..."
+            placeholder="Search name, P/F No, ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-[360px] h-10 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:border-transparent transition-all placeholder:text-text-secondary"
+            className="w-full h-10 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:border-transparent transition-all placeholder:text-text-secondary"
           />
-        </div>
+        </form>
       </div>
 
-      <div className="flex items-center ml-4 shrink-0 space-x-6">
-        <button className="relative text-text-secondary hover:text-text-primary transition-colors">
-          <Bell size={20} />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-rust-700 text-white text-[10px] font-bold flex items-center justify-center rounded-full border border-white">
-            3
-          </span>
-        </button>
-        
-        <div className="w-[1px] h-8 bg-paper-200" />
-        
+      <div className="flex items-center shrink-0 gap-3 sm:gap-4 md:gap-5">
+        <NotificationBell />
+
+        <div className="hidden sm:block w-[1px] h-8 bg-paper-200" />
+
         <Link
           href="/employees/add"
-          className="h-10 px-4 bg-county-blue hover:bg-[#0f345e] text-white text-sm font-medium rounded flex items-center transition-colors shadow-flat"
+          className="h-10 px-2.5 sm:px-4 bg-county-blue hover:bg-[#0f345e] text-white text-sm font-medium rounded flex items-center transition-colors shadow-flat shrink-0"
         >
-          + Add Employee
+          <Plus size={16} className="sm:mr-1.5" />
+          <span className="hidden sm:inline">Add Employee</span>
         </Link>
+
+        <button
+          onClick={handleSignOut}
+          title="Sign out"
+          className="text-text-secondary hover:text-rust-700 transition-colors shrink-0"
+        >
+          <LogOut size={19} />
+        </button>
       </div>
     </header>
   );

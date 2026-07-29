@@ -50,3 +50,53 @@
   outline: 2px solid theme('colors.county.blue.DEFAULT');
   outline-offset: 2px;
 }
+
+/* Themed scrollbars — slim, rounded, matching the paper/navy palette */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.paper.200') transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: theme('colors.paper.200');
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: theme('colors.county.blue.DEFAULT' / 40%);
+}
+
+/* Fully hidden scrollbar, for the folder-tab strip on the employee master
+   record page — a horizontal tab row where a track would look out of place. */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Visible-but-subtle scrollbar for dark navy surfaces (the sidebar nav) —
+   a light thumb instead of the paper-toned one used on light backgrounds,
+   so it stays a legible affordance rather than disappearing into the navy. */
+.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.32);
+}

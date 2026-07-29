@@ -3,56 +3,34 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ShieldCheck, Mail, Lock, Loader2 } from "lucide-react";
-// import { useAuthActions } from "@convex-dev/auth/react";
-// import { useMutation } from "convex/react";
-// import { api } from "../../../../convex/_generated/api";
+import { motion, AnimatePresence } from "framer-motion";
+import { ShieldCheck, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"credentials" | "otp">("credentials");
+  const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      // Simulate credential check & OTP send
-      await new Promise(r => setTimeout(r, 1000));
-      if (email && password.length >= 12) {
-        setStep("otp");
-      } else {
-        setError("Invalid email or password (min 12 chars)");
-      }
+      await signIn("password", { email, password, flow: "signIn" });
+      router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Authentication failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOtpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      // Simulate OTP verify
-      await new Promise(r => setTimeout(r, 1000));
-      if (otp.length === 6) {
-        localStorage.setItem("hrrms_authenticated", "true");
-        router.push("/dashboard");
-      } else {
-        setError("Invalid 6-digit code");
-      }
-    } catch (err: any) {
-      setError(err.message || "Verification failed");
+      setError(
+        err?.message?.includes("InvalidAccountId") ||
+          err?.message?.includes("InvalidSecret")
+          ? "Invalid email or password."
+          : "Sign in failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -61,120 +39,100 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-ink-900 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
-        
         {/* Branding */}
-        <div className="flex flex-col items-center mb-8 text-white">
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center mb-8 text-white"
+        >
           <div className="mb-6 flex items-center justify-center">
-            <Image src="/logo.png" alt="Busia County Logo" width={80} height={80} className="object-contain" priority />
+            <Image src="/logo.png" alt="Busia County Logo" width={148} height={148} className="object-contain" priority />
           </div>
           <h1 className="font-serif text-2xl font-bold tracking-tight text-center">HR Master Record</h1>
           <p className="text-sm text-text-secondary mt-1 tracking-wide uppercase font-semibold">Busia County Government</p>
-        </div>
+        </motion.div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-lg shadow-2xl p-8 border border-paper-200">
-          
-          {error && (
-            <div className="mb-6 p-3 bg-rust-700/10 border border-rust-700/20 text-rust-700 text-sm rounded-md font-medium text-center">
-              {error}
-            </div>
-          )}
-
-          {step === "credentials" ? (
-            <form onSubmit={handleCredentialsSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-text-primary mb-1.5">Work Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:bg-white transition-all"
-                    placeholder="user@busiacounty.go.ke"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-semibold text-text-primary">Password</label>
-                  <a href="#" className="text-xs font-medium text-county-blue hover:underline">Forgot password?</a>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-                  <input
-                    type="password"
-                    required
-                    minLength={12}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:bg-white transition-all"
-                    placeholder="Min. 12 characters"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full h-11 bg-county-blue hover:bg-[#0f345e] text-white font-medium rounded transition-colors flex items-center justify-center mt-2 disabled:opacity-70"
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          className="bg-white rounded-lg shadow-2xl p-8 border border-paper-200"
+        >
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-6 p-3 bg-rust-700/10 border border-rust-700/20 text-rust-700 text-sm rounded-md font-medium text-center overflow-hidden"
               >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : "Sign In"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-lg font-semibold text-text-primary mb-2">Two-Step Verification</h2>
-                <p className="text-sm text-text-secondary">
-                  We've sent a 6-digit code to <strong>{email}</strong>. Enter it below to continue.
-                </p>
-              </div>
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              <div>
+          <form onSubmit={handleCredentialsSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-semibold text-text-primary mb-1.5">Work Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
                 <input
-                  type="text"
+                  type="email"
                   required
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full h-14 bg-paper-50 border border-paper-200 rounded text-center text-display-l font-mono tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-county-blue focus:bg-white transition-all"
-                  placeholder="------"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full h-11 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:bg-white transition-all"
+                  placeholder="user@busiacounty.go.ke"
+                  autoComplete="username"
                 />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                className="w-full h-11 bg-county-green hover:bg-county-green-dark text-white font-medium rounded transition-colors flex items-center justify-center mt-2 disabled:opacity-70"
-              >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : "Verify & Continue"}
-              </button>
-
-              <div className="text-center mt-4">
+            <div>
+              <label className="block text-sm font-semibold text-text-primary mb-1.5">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full h-11 pl-10 pr-11 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:bg-white transition-all"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
                 <button
                   type="button"
-                  onClick={() => setStep("credentials")}
-                  className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
                 >
-                  Back to login
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-            </form>
-          )}
+            </div>
 
-        </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-11 bg-county-blue hover:bg-[#0f345e] text-white font-medium rounded transition-colors flex items-center justify-center mt-2 disabled:opacity-70"
+            >
+              {loading ? <Loader2 className="animate-spin" size={20} /> : "Sign In"}
+            </button>
+          </form>
 
-        {/* Footer */}
-        <div className="mt-8 text-center text-xs text-text-secondary font-medium space-x-4">
-          <span>&copy; {new Date().getFullYear()} Busia County</span>
-          <span className="text-ink-700">|</span>
-          <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-          <span className="text-ink-700">|</span>
-          <a href="#" className="hover:text-white transition-colors">Help Desk</a>
-        </div>
+          <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-text-secondary">
+            <ShieldCheck size={13} />
+            <span>Accounts are provisioned by your Records Officer or HR Director</span>
+          </div>
+        </motion.div>
+
+        <p className="mt-8 text-center text-[11px] text-white/40 tracking-wide">
+          © 2026 The County Government of Busia | HR Department. All Rights Reserved.
+        </p>
       </div>
     </div>
   );

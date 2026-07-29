@@ -1,27 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ChevronRight, ChevronLeft, Save, User, Briefcase, Building, Heart, CheckCircle2 } from "lucide-react";
-import { useMutation } from "convex/react";
+import { ChevronRight, ChevronLeft, Save, User, Briefcase, Building, Heart, CheckCircle2, Camera, X, Plus } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
+import { Id } from "../../../../../convex/_generated/dataModel";
+import Select from "@/components/Select";
 
 const employeeSchema = z.object({
   // Step 1: Personal
-  fullName: z.string().min(2, "Required"),
+  firstName: z.string().min(1, "Required"),
+  surname: z.string().min(1, "Required"),
+  lastName: z.string().min(1, "Required"),
   pfNumber: z.string().min(1, "Required"),
   nationalId: z.string().min(6, "Required"),
   dateOfBirth: z.string().min(1, "Required"),
   gender: z.enum(["Male", "Female", "Other"]),
   phoneNumber: z.string().min(10, "Required"),
   emailAddress: z.string().email("Invalid email"),
-  
+
   // Step 2: Career
   departmentId: z.string().min(1, "Required"),
   designation: z.string().min(1, "Required"),
+  jobGroup: z.string().optional(),
   payrollNumber: z.string().min(1, "Required"),
   firstAppointmentDate: z.string().min(1, "Required"),
   termsOfService: z.string().min(1, "Required"),
@@ -32,15 +37,13 @@ const employeeSchema = z.object({
   nssfNumber: z.string().min(1, "Required"),
   bankName: z.string().min(1, "Required"),
   branchName: z.string().min(1, "Required"),
-  accountNumber: z.string().min(1, "Required"),
-
-  // Step 4: Family
-  nokName: z.string().min(1, "Required"),
-  nokRelationship: z.string().min(1, "Required"),
-  nokPhone: z.string().min(1, "Required"),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
+
+type NextOfKinEntry = { name: string; relationship: string; phoneNumber: string };
+const MAX_NEXT_OF_KIN = 3;
+const emptyNextOfKin: NextOfKinEntry = { name: "", relationship: "", phoneNumber: "" };
 
 const STEPS = [
   { id: 1, title: "Personal Profile", icon: User },
@@ -54,11 +57,57 @@ export default function AddEmployeePage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createEmployee = useMutation(api.employees.create);
+  const departments = useQuery(api.departments.list) || [];
+
+  const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoStorageId, setPhotoStorageId] = useState<Id<"_storage"> | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [nextOfKinList, setNextOfKinList] = useState<NextOfKinEntry[]>([{ ...emptyNextOfKin }]);
+  const [nextOfKinError, setNextOfKinError] = useState("");
+
+  const updateNextOfKin = (index: number, field: keyof NextOfKinEntry, value: string) => {
+    setNextOfKinList((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
+  };
+  const addNextOfKin = () => {
+    if (nextOfKinList.length < MAX_NEXT_OF_KIN) {
+      setNextOfKinList((prev) => [...prev, { ...emptyNextOfKin }]);
+    }
+  };
+  const removeNextOfKin = (index: number) => {
+    setNextOfKinList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoUploading(true);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+      setPhotoStorageId(storageId);
+    } catch (err) {
+      console.error("Photo upload failed", err);
+      setPhotoPreview(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const {
     register,
     handleSubmit,
     trigger,
+    control,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -69,10 +118,10 @@ export default function AddEmployeePage() {
 
   const processNextStep = async () => {
     let fieldsToValidate: any[] = [];
-    if (currentStep === 1) fieldsToValidate = ['fullName', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
+    if (currentStep === 1) fieldsToValidate = ['firstName', 'surname', 'lastName', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
     if (currentStep === 2) fieldsToValidate = ['departmentId', 'designation', 'payrollNumber', 'firstAppointmentDate', 'termsOfService', 'stationLocation'];
-    if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'bankName', 'branchName', 'accountNumber'];
-    
+    if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'bankName', 'branchName'];
+
     const isStepValid = await trigger(fieldsToValidate as any);
     if (isStepValid) {
       setCurrentStep((prev) => prev + 1);
@@ -80,17 +129,32 @@ export default function AddEmployeePage() {
   };
 
   const onSubmit = async (data: EmployeeFormValues) => {
+    // Next of kin is optional overall, but a row the user started filling in
+    // must be completed (or removed) before submitting.
+    const partialEntry = nextOfKinList.find(
+      (e) => (e.name || e.relationship || e.phoneNumber) && !(e.name && e.relationship && e.phoneNumber)
+    );
+    if (partialEntry) {
+      setNextOfKinError("Complete or remove the next of kin entry you started");
+      setCurrentStep(4);
+      return;
+    }
+    setNextOfKinError("");
+
     setIsSubmitting(true);
     try {
       const dobYear = new Date(data.dateOfBirth).getFullYear();
       const retirementDate = `${dobYear + 60}-01-01`;
+      const fullName = [data.firstName, data.surname, data.lastName].filter(Boolean).join(" ");
+      const completeNextOfKin = nextOfKinList.filter((e) => e.name && e.relationship && e.phoneNumber);
 
       await createEmployee({
-        fullName: data.fullName,
+        fullName,
         pfNumber: data.pfNumber,
         nationalId: data.nationalId,
-        departmentId: data.departmentId,
+        departmentId: data.departmentId as Id<"departments">,
         designation: data.designation,
+        jobGroup: data.jobGroup || undefined,
         employmentStatus: "active",
         termsOfService: data.termsOfService,
         firstAppointmentDate: data.firstAppointmentDate,
@@ -101,18 +165,14 @@ export default function AddEmployeePage() {
         phoneNumber: data.phoneNumber,
         emailAddress: data.emailAddress,
         stationLocation: data.stationLocation,
+        passportPhotoId: photoStorageId ?? undefined,
         shifNhifNumber: data.shifNhifNumber,
         nssfNumber: data.nssfNumber,
         bankDetails: {
           bankName: data.bankName,
           branchName: data.branchName,
-          accountNumber: data.accountNumber,
         },
-        nextOfKin: {
-          name: data.nokName,
-          relationship: data.nokRelationship,
-          phoneNumber: data.nokPhone,
-        }
+        nextOfKin: completeNextOfKin.length > 0 ? completeNextOfKin : undefined,
       });
 
       router.push("/employees");
@@ -128,7 +188,7 @@ export default function AddEmployeePage() {
   const errorClass = "text-red-600 text-[10px] mt-0.5 absolute -bottom-4";
 
   return (
-    <div className="max-w-5xl mx-auto py-2 px-2">
+    <div className="max-w-5xl mx-auto p-4 md:p-6">
       <div className="mb-4">
         <h1 className="text-xl font-bold text-[#202b5d]">Onboard New Employee</h1>
       </div>
@@ -175,13 +235,72 @@ export default function AddEmployeePage() {
           
           {/* STEP 1 */}
           <div className={currentStep === 1 ? "block" : "hidden"}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
-              <div className="col-span-1 md:col-span-2 relative">
-                <label className={labelClass}>Full Legal Name</label>
-                <input {...register("fullName")} className={inputClass} />
-                {errors.fullName && <p className={errorClass}>{errors.fullName.message}</p>}
+            <div className="flex items-center gap-4 mb-5">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-20 h-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:border-[#202b5d] transition-colors overflow-hidden shrink-0 relative"
+              >
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Passport preview" className="w-full h-full object-cover" />
+                ) : (
+                  <Camera size={22} className="text-slate-400" />
+                )}
+                {photoUploading && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-[10px] font-bold">
+                    Uploading...
+                  </div>
+                )}
               </div>
-              
+              <div>
+                <p className="text-[12px] font-bold text-slate-700">Passport Photograph</p>
+                <p className="text-[11px] text-slate-500 mb-1.5">JPG or PNG, square image recommended</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-7 px-3 text-[11px] font-bold border border-slate-300 rounded text-slate-600 hover:bg-slate-50"
+                  >
+                    {photoPreview ? "Change" : "Upload"}
+                  </button>
+                  {photoPreview && (
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoPreview(null); setPhotoStorageId(null); }}
+                      className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-rust-700"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
+              <div className="relative">
+                <label className={labelClass}>First Name</label>
+                <input {...register("firstName")} className={inputClass} />
+                {errors.firstName && <p className={errorClass}>{errors.firstName.message}</p>}
+              </div>
+
+              <div className="relative">
+                <label className={labelClass}>Surname</label>
+                <input {...register("surname")} className={inputClass} />
+                {errors.surname && <p className={errorClass}>{errors.surname.message}</p>}
+              </div>
+
+              <div className="relative">
+                <label className={labelClass}>Last Name</label>
+                <input {...register("lastName")} className={inputClass} />
+                {errors.lastName && <p className={errorClass}>{errors.lastName.message}</p>}
+              </div>
+
               <div className="relative">
                 <label className={labelClass}>P/F Number</label>
                 <input {...register("pfNumber")} className={inputClass} />
@@ -202,11 +321,21 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Gender</label>
-                <select {...register("gender")} className={inputClass}>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
-                </select>
+                <Controller
+                  name="gender"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={[
+                        { value: "Female", label: "Female" },
+                        { value: "Male", label: "Male" },
+                        { value: "Other", label: "Other" },
+                      ]}
+                    />
+                  )}
+                />
               </div>
 
               <div className="relative">
@@ -229,24 +358,18 @@ export default function AddEmployeePage() {
               
               <div className="relative">
                 <label className={labelClass}>Department</label>
-                <select {...register("departmentId")} className={inputClass}>
-                  <option value="">Select...</option>
-                  <option value="Agriculture & Blue Economy">Smart Agriculture, Livestock, Fisheries, Blue Economy and Agribusiness</option>
-                  <option value="Trade & SME">Trade, Investment, Industrialisation, Cooperatives, Small and Micro Enterprises (SME)</option>
-                  <option value="Education & Skills">Education and Industrial Skills Development</option>
-                  <option value="Treasury & Planning">Country Treasury and Economic Planning</option>
-                  <option value="Youth & Arts">Youth, Sports, Culture, Gender and Creative Arts</option>
-                  <option value="Transport & Public Works">Transport, Roads and Public Works</option>
-                  <option value="PSM">Public Service Management (PSM)</option>
-                  <option value="Lands & Housing">Lands, Housing and Urban Development</option>
-                  <option value="Water & Climate">Water, Environment, Irrigation, Natural Resources and Climate Change</option>
-                  <option value="Health Services">Health Services and Sanitation</option>
-                  <option value="ICT & Digital Economy">Strategic Partnership, ICT and Digital Economy</option>
-                  <option value="County Public Service Board">County Public Service Board</option>
-                  <option value="County Law Office">County Law Office</option>
-                  <option value="County Assembly">County Assembly</option>
-                  <option value="Governorship">Governorship</option>
-                </select>
+                <Controller
+                  name="departmentId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="Select..."
+                      options={departments.map((dept) => ({ value: dept._id, label: dept.name }))}
+                    />
+                  )}
+                />
                 {errors.departmentId && <p className={errorClass}>{errors.departmentId.message}</p>}
               </div>
 
@@ -257,6 +380,19 @@ export default function AddEmployeePage() {
               </div>
 
               <div className="relative">
+                <label className={labelClass}>Job Group</label>
+                <input
+                  {...register("jobGroup")}
+                  onChange={(e) => {
+                    e.target.value = e.target.value.toUpperCase();
+                    register("jobGroup").onChange(e);
+                  }}
+                  className={inputClass}
+                  placeholder="e.g. M"
+                />
+              </div>
+
+              <div className="relative">
                 <label className={labelClass}>Payroll Number</label>
                 <input {...register("payrollNumber")} className={inputClass} />
                 {errors.payrollNumber && <p className={errorClass}>{errors.payrollNumber.message}</p>}
@@ -264,12 +400,22 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Terms of Service</label>
-                <select {...register("termsOfService")} className={inputClass}>
-                  <option value="">Select...</option>
-                  <option value="Permanent & Pensionable">P&P</option>
-                  <option value="Contract">Contract</option>
-                  <option value="Casual">Casual</option>
-                </select>
+                <Controller
+                  name="termsOfService"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="Select..."
+                      options={[
+                        { value: "Permanent & Pensionable", label: "P&P" },
+                        { value: "Contract", label: "Contract" },
+                        { value: "Casual", label: "Casual" },
+                      ]}
+                    />
+                  )}
+                />
                 {errors.termsOfService && <p className={errorClass}>{errors.termsOfService.message}</p>}
               </div>
 
@@ -306,6 +452,10 @@ export default function AddEmployeePage() {
 
               <div className="col-span-3 border-b border-slate-100 my-1"></div>
 
+              <div className="col-span-3 -mt-2 mb-1">
+                <p className="text-[11px] text-slate-400">Account numbers are managed by the payroll system, not HR — only bank and branch are recorded here.</p>
+              </div>
+
               <div className="relative">
                 <label className={labelClass}>Bank Name</label>
                 <input {...register("bankName")} className={inputClass} />
@@ -318,37 +468,69 @@ export default function AddEmployeePage() {
                 {errors.branchName && <p className={errorClass}>{errors.branchName.message}</p>}
               </div>
 
-              <div className="relative">
-                <label className={labelClass}>Account Number</label>
-                <input {...register("accountNumber")} className={inputClass} />
-                {errors.accountNumber && <p className={errorClass}>{errors.accountNumber.message}</p>}
-              </div>
-
             </div>
           </div>
 
           {/* STEP 4 */}
           <div className={currentStep === 4 ? "block" : "hidden"}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
-              
-              <div className="col-span-3">
-                <label className={labelClass}>Next of Kin - Full Name</label>
-                <input {...register("nokName")} className={inputClass} />
-                {errors.nokName && <p className={errorClass}>{errors.nokName.message}</p>}
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-[13px] font-bold text-slate-700">Next of Kin</p>
+                <p className="text-[11px] text-slate-500">Optional — add up to {MAX_NEXT_OF_KIN}. Shown as emergency contacts on the employee record.</p>
               </div>
+              {nextOfKinList.length < MAX_NEXT_OF_KIN && (
+                <button
+                  type="button"
+                  onClick={addNextOfKin}
+                  className="h-7 px-2.5 text-[11px] font-bold border border-slate-300 rounded text-slate-600 hover:bg-slate-50 flex items-center gap-1 shrink-0"
+                >
+                  <Plus size={12} /> Add
+                </button>
+              )}
+            </div>
 
-              <div className="relative">
-                <label className={labelClass}>Relationship</label>
-                <input {...register("nokRelationship")} className={inputClass} />
-                {errors.nokRelationship && <p className={errorClass}>{errors.nokRelationship.message}</p>}
-              </div>
+            {nextOfKinError && (
+              <p className="text-red-600 text-[11px] mb-3">{nextOfKinError}</p>
+            )}
 
-              <div className="relative">
-                <label className={labelClass}>Phone Number</label>
-                <input {...register("nokPhone")} className={inputClass} />
-                {errors.nokPhone && <p className={errorClass}>{errors.nokPhone.message}</p>}
-              </div>
-
+            <div className="space-y-4">
+              {nextOfKinList.map((entry, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3 p-3 border border-paper-100 rounded relative">
+                  {nextOfKinList.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeNextOfKin(index)}
+                      className="absolute top-2 right-2 text-slate-400 hover:text-rust-700"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  <div className="col-span-3">
+                    <label className={labelClass}>Full Name</label>
+                    <input
+                      value={entry.name}
+                      onChange={(e) => updateNextOfKin(index, "name", e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="relative">
+                    <label className={labelClass}>Relationship</label>
+                    <input
+                      value={entry.relationship}
+                      onChange={(e) => updateNextOfKin(index, "relationship", e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="relative">
+                    <label className={labelClass}>Phone Number</label>
+                    <input
+                      value={entry.phoneNumber}
+                      onChange={(e) => updateNextOfKin(index, "phoneNumber", e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

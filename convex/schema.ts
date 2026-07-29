@@ -1,22 +1,36 @@
 import { defineSchema, defineTable } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
+export const userRoleValidator = v.union(
+  v.literal("super_admin"),
+  v.literal("hr_director"),
+  v.literal("records_officer"),
+  v.literal("department_viewer")
+);
+
 export default defineSchema({
+  ...authTables,
+
+  // Extends the base Convex Auth `users` table (name, email, phone, image,
+  // emailVerificationTime, phoneVerificationTime, isAnonymous) with our
+  // application-specific profile fields. Credentials themselves live in
+  // Convex Auth's own `authAccounts` table, not here.
   users: defineTable({
-    email: v.string(),
-    passwordHash: v.string(),
-    name: v.string(),
-    role: v.union(
-      v.literal("super_admin"),
-      v.literal("hr_director"),
-      v.literal("records_officer"),
-      v.literal("department_viewer")
-    ),
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    image: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+
+    role: v.optional(userRoleValidator),
     departmentId: v.optional(v.id("departments")),
-    isActive: v.boolean(),
-    createdAt: v.number(),
+    isActive: v.optional(v.boolean()),
+    createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
-  }).index("by_email", ["email"]),
+  }).index("email", ["email"]),
 
   departments: defineTable({
     name: v.string(),
@@ -27,7 +41,7 @@ export default defineSchema({
     fullName: v.string(),
     pfNumber: v.string(),
     nationalId: v.string(),
-    departmentId: v.string(),
+    departmentId: v.id("departments"),
     designation: v.string(),
     employmentStatus: v.union(
       v.literal("active"),
@@ -57,21 +71,18 @@ export default defineSchema({
     bankDetails: v.optional(v.object({
       bankName: v.string(),
       branchName: v.string(),
-      accountNumber: v.string(),
     })),
     saccoInformation: v.optional(v.string()),
 
-    // Family Information
-    nextOfKin: v.optional(v.object({
-      name: v.string(),
-      relationship: v.string(),
-      phoneNumber: v.string(),
-    })),
-    emergencyContact: v.optional(v.object({
-      name: v.string(),
-      relationship: v.string(),
-      phoneNumber: v.string(),
-    })),
+    // Family Information — up to 3 next of kin (optional), also used as the
+    // emergency-contact list shown from the employee master record.
+    nextOfKin: v.optional(v.array(
+      v.object({
+        name: v.string(),
+        relationship: v.string(),
+        phoneNumber: v.string(),
+      })
+    )),
     dependants: v.optional(v.array(
       v.object({
         name: v.string(),
@@ -135,7 +146,13 @@ export default defineSchema({
   appraisals: defineTable({
     employeeId: v.id("employees"),
     cycleLabel: v.string(),
-    status: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("submitted"),
+      v.literal("completed")
+    ),
+    score: v.optional(v.number()),
+    comments: v.optional(v.string()),
     documentId: v.optional(v.id("documents")),
     submittedAt: v.number(),
   }).index("by_employee", ["employeeId"]),
@@ -143,10 +160,12 @@ export default defineSchema({
   trainingRecords: defineTable({
     employeeId: v.id("employees"),
     trainingTitle: v.string(),
+    institution: v.optional(v.string()),
     nominationDate: v.string(),
     startDate: v.string(),
     endDate: v.string(),
     attendanceConfirmed: v.boolean(),
+    notes: v.optional(v.string()),
     documentIds: v.array(v.id("documents")),
   }).index("by_employee", ["employeeId"]),
 
@@ -181,6 +200,7 @@ export default defineSchema({
     ),
     noticeDate: v.string(),
     finalizedDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
     documentIds: v.array(v.id("documents")),
   }).index("by_employee", ["employeeId"]),
 
@@ -208,4 +228,12 @@ export default defineSchema({
     otp: v.string(),
     expiresAt: v.number(),
   }).index("by_email", ["email"]),
+
+  systemSettings: defineTable({
+    enforceMfa: v.boolean(),
+    ipWhitelistEnabled: v.boolean(),
+    allowedIpRanges: v.optional(v.string()),
+    updatedBy: v.optional(v.id("users")),
+    updatedAt: v.number(),
+  }),
 });

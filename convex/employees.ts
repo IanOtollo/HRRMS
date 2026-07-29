@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole, requireDepartmentScope } from "./lib/rbac";
-import { Id } from "./_generated/dataModel";
 
 export const list = query({
   args: {
@@ -42,8 +41,8 @@ export const list = query({
       results = results.filter((r) => r.jobGroup === args.jobGroup);
     }
 
-    if (args.searchTerm) {
-      const term = args.searchTerm.toLowerCase();
+    const term = args.searchTerm?.trim().toLowerCase();
+    if (term) {
       results = results.filter(
         (r) =>
           r.fullName.toLowerCase().includes(term) ||
@@ -54,18 +53,10 @@ export const list = query({
 
     // Mask sensitive data for non-admins
     if (user.role === "records_officer" || user.role === "department_viewer") {
-      results = results.map((r) => {
-        const maskedBankDetails = r.bankDetails ? {
-          bankName: r.bankDetails.bankName,
-          branchName: r.bankDetails.branchName,
-          accountNumber: `***${r.bankDetails.accountNumber.slice(-4)}`
-        } : undefined;
-        return {
-          ...r,
-          nationalId: `***${r.nationalId.slice(-4)}`,
-          bankDetails: maskedBankDetails,
-        };
-      });
+      results = results.map((r) => ({
+        ...r,
+        nationalId: `***${r.nationalId.slice(-4)}`,
+      }));
     }
 
     return results;
@@ -88,20 +79,14 @@ export const get = query({
     if (!employee) return null;
 
     if (user.role === "department_viewer") {
-      await requireDepartmentScope(ctx, user, employee.departmentId as unknown as Id<"departments">);
+      await requireDepartmentScope(ctx, user, employee.departmentId);
     }
 
     // Masking
     if (user.role !== "super_admin" && user.role !== "hr_director") {
-      const maskedBankDetails = employee.bankDetails ? {
-        bankName: employee.bankDetails.bankName,
-        branchName: employee.bankDetails.branchName,
-        accountNumber: `***${employee.bankDetails.accountNumber.slice(-4)}`
-      } : undefined;
       return {
         ...employee,
         nationalId: `***${employee.nationalId.slice(-4)}`,
-        bankDetails: maskedBankDetails,
       };
     }
 
@@ -114,7 +99,7 @@ export const create = mutation({
     fullName: v.string(),
     pfNumber: v.string(),
     nationalId: v.string(),
-    departmentId: v.string(),
+    departmentId: v.id("departments"),
     designation: v.string(),
     employmentStatus: v.union(
       v.literal("active"),
@@ -126,7 +111,8 @@ export const create = mutation({
     termsOfService: v.string(),
     firstAppointmentDate: v.string(),
     retirementDate: v.string(),
-    
+    jobGroup: v.optional(v.string()),
+
     // Expanded Profile Fields
     payrollNumber: v.optional(v.string()),
     dateOfBirth: v.optional(v.string()),
@@ -143,21 +129,18 @@ export const create = mutation({
     bankDetails: v.optional(v.object({
       bankName: v.string(),
       branchName: v.string(),
-      accountNumber: v.string(),
     })),
     saccoInformation: v.optional(v.string()),
 
-    // Family Information
-    nextOfKin: v.optional(v.object({
-      name: v.string(),
-      relationship: v.string(),
-      phoneNumber: v.string(),
-    })),
-    emergencyContact: v.optional(v.object({
-      name: v.string(),
-      relationship: v.string(),
-      phoneNumber: v.string(),
-    })),
+    // Family Information — up to 5 next of kin, doubling as the emergency
+    // contact list surfaced from the employee master record.
+    nextOfKin: v.optional(v.array(
+      v.object({
+        name: v.string(),
+        relationship: v.string(),
+        phoneNumber: v.string(),
+      })
+    )),
     dependants: v.optional(v.array(
       v.object({
         name: v.string(),
@@ -177,7 +160,7 @@ export const create = mutation({
 
     await ctx.db.insert("auditLog", {
       userId: user._id,
-      userName: user.name,
+      userName: user.name ?? "Unknown",
       action: "employee.create",
       recordType: "employees",
       recordId: id,
@@ -212,7 +195,7 @@ export const updateField = mutation({
 
     await ctx.db.insert("auditLog", {
       userId: user._id,
-      userName: user.name,
+      userName: user.name ?? "Unknown",
       action: "employee.updateField",
       recordType: "employees",
       recordId: args.id,

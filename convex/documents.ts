@@ -48,7 +48,7 @@ export const finalizeUpload = mutation({
 
     await ctx.db.insert("auditLog", {
       userId: user._id,
-      userName: user.name,
+      userName: user.name ?? "Unknown",
       action: "document.upload",
       recordType: "documents",
       recordId: id,
@@ -76,7 +76,7 @@ export const verify = mutation({
 
     await ctx.db.insert("auditLog", {
       userId: user._id,
-      userName: user.name,
+      userName: user.name ?? "Unknown",
       action: "document.verify",
       recordType: "documents",
       recordId: args.documentId,
@@ -112,5 +112,27 @@ export const listByEmployee = query({
       .collect();
 
     return docs;
+  },
+});
+
+export const listPending = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const docs = await ctx.db
+      .query("documents")
+      .withIndex("by_status", (q) => q.eq("status", "uploaded"))
+      .order("desc")
+      .take(50);
+
+    const withEmployeeNames = await Promise.all(
+      docs.map(async (doc) => {
+        const employee = await ctx.db.get(doc.employeeId);
+        return { ...doc, employeeName: employee?.fullName ?? "Unknown" };
+      })
+    );
+
+    return withEmployeeNames;
   },
 });

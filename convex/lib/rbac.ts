@@ -1,19 +1,34 @@
 import { QueryCtx, MutationCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import { Id } from "../_generated/dataModel";
-import { auth } from "../auth";
+import { getAuthUserId } from "@convex-dev/auth/server";
+
+export async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new ConvexError("Not authenticated");
+  }
+  const user = await ctx.db.get(userId);
+  if (!user) {
+    throw new ConvexError("Not authenticated");
+  }
+  if (user.isActive === false) {
+    throw new ConvexError("This account has been deactivated");
+  }
+  return user;
+}
 
 export async function requireRole(
   ctx: QueryCtx | MutationCtx,
   allowedRoles: string[]
 ) {
-  // DEV MOCK: Bypassing auth to allow the system to run locally 
-  return {
-    _id: "mock_user_id",
-    name: "System Admin",
-    role: "super_admin",
-    isActive: true,
-  } as any;
+  const user = await getCurrentUser(ctx);
+
+  if (!user.role || !allowedRoles.includes(user.role)) {
+    throw new ConvexError("Access denied: insufficient permissions");
+  }
+
+  return user;
 }
 
 export async function requireDepartmentScope(

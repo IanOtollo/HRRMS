@@ -1,4 +1,5 @@
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
+import { v, ConvexError } from "convex/values";
 import { requireRole } from "./lib/rbac";
 
 export const list = query({
@@ -24,5 +25,90 @@ export const list = query({
     }
 
     return records;
+  },
+});
+
+export const logTraining = mutation({
+  args: {
+    employeeId: v.id("employees"),
+    trainingTitle: v.string(),
+    institution: v.optional(v.string()),
+    nominationDate: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const employee = await ctx.db.get(args.employeeId);
+    if (!employee) throw new ConvexError("Employee not found");
+
+    const id = await ctx.db.insert("trainingRecords", {
+      employeeId: args.employeeId,
+      trainingTitle: args.trainingTitle,
+      institution: args.institution,
+      nominationDate: args.nominationDate,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      attendanceConfirmed: false,
+      documentIds: [],
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "training.log",
+      recordType: "trainingRecords",
+      recordId: id,
+      timestamp: Date.now(),
+      details: { trainingTitle: args.trainingTitle },
+    });
+
+    return id;
+  },
+});
+
+export const confirmAttendance = mutation({
+  args: { id: v.id("trainingRecords") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const record = await ctx.db.get(args.id);
+    if (!record) throw new ConvexError("Training record not found");
+
+    await ctx.db.patch(args.id, { attendanceConfirmed: true });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "training.confirmAttendance",
+      recordType: "trainingRecords",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+export const updateNotes = mutation({
+  args: {
+    id: v.id("trainingRecords"),
+    notes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const record = await ctx.db.get(args.id);
+    if (!record) throw new ConvexError("Training record not found");
+
+    await ctx.db.patch(args.id, { notes: args.notes });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "training.updateNotes",
+      recordType: "trainingRecords",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
   },
 });
