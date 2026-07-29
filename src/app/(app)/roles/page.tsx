@@ -5,11 +5,12 @@ import { ShieldAlert, Plus, ShieldOff, Power, UserCog } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { Id, Doc } from "../../../../convex/_generated/dataModel";
 import PageHeader from "@/components/PageHeader";
 import SlideOver from "@/components/SlideOver";
 import ErrorState from "@/components/ErrorState";
 import Select from "@/components/Select";
+import EmployeePicker from "@/components/EmployeePicker";
 
 const ROLE_OPTIONS = Object.entries({
   super_admin: "Super Administrator",
@@ -44,8 +45,7 @@ export default function RolesPage() {
   const updateRole = useMutation(api.users.updateRole);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<Doc<"employees"> | null>(null);
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("records_officer");
   const [departmentId, setDepartmentId] = useState("");
@@ -70,12 +70,26 @@ export default function RolesPage() {
   }
 
   const resetForm = () => {
-    setName(""); setEmail(""); setPassword(""); setRole("records_officer"); setDepartmentId(""); setActionError("");
+    setSelectedEmployee(null); setPassword(""); setRole("records_officer"); setDepartmentId(""); setActionError("");
   };
 
+  const alreadyInvitedEmails = new Set(users.map((u) => u.email?.toLowerCase()).filter(Boolean));
+
   const handleCreate = async () => {
-    if (!name || !email || password.length < 8) {
-      setActionError("Fill in name, email, and a password of at least 8 characters");
+    if (!selectedEmployee) {
+      setActionError("Select an employee to invite");
+      return;
+    }
+    if (!selectedEmployee.emailAddress) {
+      setActionError(`${selectedEmployee.fullName} has no work email on file — add one to their profile first`);
+      return;
+    }
+    if (alreadyInvitedEmails.has(selectedEmployee.emailAddress.toLowerCase())) {
+      setActionError(`${selectedEmployee.fullName} already has a user account`);
+      return;
+    }
+    if (password.length < 8) {
+      setActionError("Set a temporary password of at least 8 characters");
       return;
     }
     if (role === "department_viewer" && !departmentId) {
@@ -85,7 +99,9 @@ export default function RolesPage() {
     setSubmitting(true);
     try {
       await createUser({
-        name, email, password,
+        name: selectedEmployee.fullName,
+        email: selectedEmployee.emailAddress,
+        password,
         role: role as any,
         departmentId: departmentId ? (departmentId as Id<"departments">) : undefined,
       });
@@ -206,13 +222,16 @@ export default function RolesPage() {
       >
         {actionError && <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{actionError}</div>}
         <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Full Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" />
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Employee</label>
+          <EmployeePicker value={selectedEmployee} onChange={setSelectedEmployee} placeholder="Search by name, ID, or P/F number..." />
+          <p className="text-[11px] text-slate-400 mt-1">Only existing employee records can be invited as system users.</p>
         </div>
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Work Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" />
-        </div>
+        {selectedEmployee && (
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Work Email</label>
+            <input value={selectedEmployee.emailAddress ?? "No email on file"} disabled className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] bg-slate-50 text-slate-500" />
+          </div>
+        )}
         <div>
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Temporary Password</label>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" placeholder="Min. 8 characters" />

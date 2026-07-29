@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DoorOpen, Plus, UserMinus, ExternalLink, Save, CheckCircle2, AlertTriangle } from "lucide-react";
+import { DoorOpen, Plus, UserMinus, ExternalLink, Save, CheckCircle2, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
@@ -11,6 +11,7 @@ import EmployeePicker from "@/components/EmployeePicker";
 import PageHeader from "@/components/PageHeader";
 import Select from "@/components/Select";
 import SlideOver from "@/components/SlideOver";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const STAGE_LABELS: Record<string, string> = {
   notice_filed: "Notice Filed",
@@ -34,18 +35,55 @@ const EXIT_TYPE_LABELS: Record<string, string> = {
   termination: "Termination",
 };
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export default function RetirementExitPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<Id<"exitRecords"> | null>(null);
   const records = useQuery(api.exitRecords.list) || [];
   const employees = useQuery(api.employees.list, {}) || [];
   const initiateExit = useMutation(api.exitRecords.initiateExit);
+  const renewContract = useMutation(api.employees.renewContract);
 
   const [selectedEmployee, setSelectedEmployee] = useState<Doc<"employees"> | null>(null);
   const [exitType, setExitType] = useState("retirement");
   const [noticeDate, setNoticeDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+
+  const [renewTarget, setRenewTarget] = useState<Doc<"employees"> | null>(null);
+  const [renewDate, setRenewDate] = useState("");
+  const [renewNote, setRenewNote] = useState("");
+  const [renewSubmitting, setRenewSubmitting] = useState(false);
+  const [renewError, setRenewError] = useState("");
+
+  const contractEmployees = employees
+    .filter((e) => (e.termsOfService === "Contract" || e.termsOfService === "Casual") && e.contractEndDate)
+    .sort((a, b) => (a.contractEndDate! < b.contractEndDate! ? -1 : 1));
+  const expiredContractCount = contractEmployees.filter((e) => e.contractEndDate! < todayISO()).length;
+
+  const openRenew = (employee: Doc<"employees">) => {
+    setRenewTarget(employee);
+    setRenewDate("");
+    setRenewNote("");
+    setRenewError("");
+  };
+
+  const submitRenew = async () => {
+    if (!renewTarget || !renewDate) {
+      setRenewError("Choose a new contract end date");
+      return;
+    }
+    setRenewSubmitting(true);
+    try {
+      await renewContract({ id: renewTarget._id, newContractEndDate: renewDate, note: renewNote || undefined });
+      setRenewTarget(null);
+    } catch (err: any) {
+      setRenewError(err?.data ?? err?.message ?? "Failed to renew contract");
+    } finally {
+      setRenewSubmitting(false);
+    }
+  };
 
   const employeeFor = (id: string) => employees.find((e) => e._id === id);
   const employeeName = (id: string) => employeeFor(id)?.fullName ?? "Unknown";
@@ -92,6 +130,7 @@ export default function RetirementExitPage() {
           { label: "Total Pipelines", value: records.length },
           { label: "In Progress", value: activeCount, accentClass: "text-amber-600" },
           { label: "Finalized", value: finalizedCount, accentClass: "text-emerald-600" },
+          { label: "Expired Contracts", value: expiredContractCount, accentClass: "text-rust-700" },
         ]}
         action={
           <button
@@ -149,6 +188,111 @@ export default function RetirementExitPage() {
           </table>
         </div>
       </div>
+
+      {/* Contract & Casual Expiry */}
+      <div className="bg-white border border-paper-200 shadow-sm rounded-xl overflow-hidden mt-6">
+        <div className="px-4 py-3 border-b border-paper-200 bg-slate-50 flex items-center gap-2">
+          <Clock size={14} className="text-slate-400" />
+          <h2 className="text-[12px] font-bold text-slate-600 uppercase tracking-wider">Contract & Casual Expiry</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-paper-200">
+                <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-slate-500">Employee</th>
+                <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-slate-500">Terms</th>
+                <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-slate-500">Contract End Date</th>
+                <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-slate-500">Status</th>
+                <th className="px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-slate-500"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-paper-100">
+              {contractEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center">
+                      <Clock size={32} className="text-slate-300 mb-3" />
+                      <span className="text-[14px] font-bold text-slate-600">No Casual/Contract employees with a contract end date on record</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                contractEmployees.map((emp) => {
+                  const isExpired = emp.contractEndDate! < todayISO();
+                  return (
+                    <tr key={emp._id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 text-[13px] font-bold text-[#202b5d]">{emp.fullName}</td>
+                      <td className="px-4 py-3 text-[12px] text-slate-600">{emp.termsOfService}</td>
+                      <td className="px-4 py-3 text-[12px] text-slate-600">{emp.contractEndDate}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isExpired ? "bg-rust-700/10 text-rust-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {isExpired ? "Expired" : "Active"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => openRenew(emp)}
+                          className="h-7 px-2.5 text-[11px] font-bold border border-slate-300 rounded text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1"
+                        >
+                          <RefreshCw size={12} /> Renew
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Renew Contract */}
+      <SlideOver
+        open={!!renewTarget}
+        onClose={() => setRenewTarget(null)}
+        title={renewTarget ? `Renew Contract — ${renewTarget.fullName}` : "Renew Contract"}
+        icon={RefreshCw}
+        footer={
+          <>
+            <button onClick={() => setRenewTarget(null)} className="px-4 h-9 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+            <button
+              onClick={submitRenew}
+              disabled={renewSubmitting}
+              className="px-4 h-9 text-[12px] font-bold bg-[#202b5d] text-white hover:bg-[#161f47] rounded-lg transition-colors shadow-sm disabled:opacity-60"
+            >
+              {renewSubmitting ? "Renewing..." : "Renew Contract"}
+            </button>
+          </>
+        }
+      >
+        {renewError && (
+          <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{renewError}</div>
+        )}
+        {renewTarget && (
+          <div className="text-[12px] text-slate-500">
+            Current end date: <span className="font-bold text-slate-700">{renewTarget.contractEndDate ?? "—"}</span>
+          </div>
+        )}
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Contract End Date</label>
+          <input
+            type="date"
+            min={todayISO()}
+            value={renewDate}
+            onChange={(e) => setRenewDate(e.target.value)}
+            className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Renewal Note (Optional)</label>
+          <textarea
+            value={renewNote}
+            onChange={(e) => setRenewNote(e.target.value)}
+            className="w-full border border-slate-300 rounded-lg p-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none h-20 resize-none"
+            placeholder="Reason for renewal, new terms, etc."
+          />
+        </div>
+      </SlideOver>
 
       {/* Initiate Exit */}
       <SlideOver
@@ -234,6 +378,7 @@ function ClearancePortalBody({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
+  const [pendingStage, setPendingStage] = useState<string | null>(null);
 
   useEffect(() => {
     setNotes(record.notes ?? "");
@@ -243,13 +388,14 @@ function ClearancePortalBody({
   const currentIndex = STAGE_ORDER.indexOf(record.stage);
   const isFinalized = record.stage === "finalized";
 
-  const jumpToStage = async (stageValue: string) => {
-    if (stageValue === record.stage) return;
+  const confirmStage = async () => {
+    if (!pendingStage) return;
     setChangingStage(true);
     try {
-      await advanceStage({ id: record._id, stage: stageValue as any });
+      await advanceStage({ id: record._id, stage: pendingStage as any });
     } finally {
       setChangingStage(false);
+      setPendingStage(null);
     }
   };
 
@@ -303,7 +449,7 @@ function ClearancePortalBody({
             return (
               <button
                 key={stageValue}
-                onClick={() => jumpToStage(stageValue)}
+                onClick={() => stageValue !== record.stage && setPendingStage(stageValue)}
                 disabled={changingStage}
                 className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors text-left disabled:opacity-50 ${
                   isActive
@@ -345,6 +491,19 @@ function ClearancePortalBody({
       >
         Open Employee Master Record <ExternalLink size={13} />
       </Link>
+
+      <ConfirmDialog
+        open={!!pendingStage}
+        title={`Move to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`}
+        message={
+          pendingStage === "finalized"
+            ? `This will finalize the exit and update ${employee?.fullName ?? "the employee"}'s employment status to ${record.exitType === "retirement" ? "Retired" : "Terminated"}. This cannot be undone from here.`
+            : `Are you sure you want to move this clearance pipeline to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`
+        }
+        confirmLabel="Yes, move stage"
+        onConfirm={confirmStage}
+        onCancel={() => setPendingStage(null)}
+      />
     </>
   );
 }

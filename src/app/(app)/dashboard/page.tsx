@@ -50,7 +50,7 @@ export default function DashboardPage() {
           colorClass="text-blue-700"
         />
         <StatCard
-          title="Pending Document Uploads"
+          title="Pending Document to be Verified"
           value={stats.pendingUploads}
           hint="Uploaded, awaiting verification"
           icon={UploadCloud}

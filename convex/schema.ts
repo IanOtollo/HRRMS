@@ -53,12 +53,15 @@ export default defineSchema({
     termsOfService: v.string(),
     firstAppointmentDate: v.string(),
     retirementDate: v.string(),
+    // Only meaningful for Casual/Contract employees — the current contract's
+    // expiry, renewed via employees.renewContract as terms are extended.
+    contractEndDate: v.optional(v.string()),
     jobGroup: v.optional(v.string()),
     
     // Expanded Profile Fields
     payrollNumber: v.optional(v.string()),
     dateOfBirth: v.optional(v.string()),
-    gender: v.optional(v.union(v.literal("Male"), v.literal("Female"), v.literal("Other"))),
+    gender: v.optional(v.union(v.literal("Male"), v.literal("Female"))),
     phoneNumber: v.optional(v.string()),
     emailAddress: v.optional(v.string()),
     passportPhotoId: v.optional(v.id("_storage")),
@@ -99,7 +102,9 @@ export default defineSchema({
     })
     .index("by_pf", ["pfNumber"])
     .index("by_national_id", ["nationalId"])
-    .index("by_department", ["departmentId"]),
+    .index("by_department", ["departmentId"])
+    .index("by_phone", ["phoneNumber"])
+    .index("by_email", ["emailAddress"]),
 
   documents: defineTable({
     employeeId: v.id("employees"),

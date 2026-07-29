@@ -111,12 +111,13 @@ export const create = mutation({
     termsOfService: v.string(),
     firstAppointmentDate: v.string(),
     retirementDate: v.string(),
+    contractEndDate: v.optional(v.string()),
     jobGroup: v.optional(v.string()),
 
     // Expanded Profile Fields
     payrollNumber: v.optional(v.string()),
     dateOfBirth: v.optional(v.string()),
-    gender: v.optional(v.union(v.literal("Male"), v.literal("Female"), v.literal("Other"))),
+    gender: v.optional(v.union(v.literal("Male"), v.literal("Female"))),
     phoneNumber: v.optional(v.string()),
     emailAddress: v.optional(v.string()),
     passportPhotoId: v.optional(v.id("_storage")),
@@ -151,7 +152,43 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
-    
+
+    const pfClash = await ctx.db
+      .query("employees")
+      .withIndex("by_pf", (q) => q.eq("pfNumber", args.pfNumber))
+      .unique();
+    if (pfClash) {
+      throw new ConvexError(`P/F Number ${args.pfNumber} is already assigned to another employee`);
+    }
+
+    const idClash = await ctx.db
+      .query("employees")
+      .withIndex("by_national_id", (q) => q.eq("nationalId", args.nationalId))
+      .unique();
+    if (idClash) {
+      throw new ConvexError(`National ID ${args.nationalId} is already assigned to another employee`);
+    }
+
+    if (args.phoneNumber) {
+      const phoneClash = await ctx.db
+        .query("employees")
+        .withIndex("by_phone", (q) => q.eq("phoneNumber", args.phoneNumber))
+        .unique();
+      if (phoneClash) {
+        throw new ConvexError(`Phone number ${args.phoneNumber} is already assigned to another employee`);
+      }
+    }
+
+    if (args.emailAddress) {
+      const emailClash = await ctx.db
+        .query("employees")
+        .withIndex("by_email", (q) => q.eq("emailAddress", args.emailAddress))
+        .unique();
+      if (emailClash) {
+        throw new ConvexError(`Email address ${args.emailAddress} is already assigned to another employee`);
+      }
+    }
+
     const id = await ctx.db.insert("employees", {
       ...args,
       createdAt: Date.now(),
@@ -188,6 +225,23 @@ export const updateField = mutation({
       throw new ConvexError("Records Officer cannot change employment status");
     }
 
+    const uniqueFieldChecks: Record<string, { index: "by_pf" | "by_national_id" | "by_phone" | "by_email"; label: string }> = {
+      pfNumber: { index: "by_pf", label: "P/F Number" },
+      nationalId: { index: "by_national_id", label: "National ID" },
+      phoneNumber: { index: "by_phone", label: "Phone number" },
+      emailAddress: { index: "by_email", label: "Email address" },
+    };
+    const check = uniqueFieldChecks[args.field];
+    if (check && args.value) {
+      const existing = await ctx.db
+        .query("employees")
+        .withIndex(check.index, (q) => q.eq(args.field as never, args.value))
+        .unique();
+      if (existing && existing._id !== args.id) {
+        throw new ConvexError(`${check.label} ${args.value} is already assigned to another employee`);
+      }
+    }
+
     await ctx.db.patch(args.id, {
       [args.field]: args.value,
       updatedAt: Date.now(),
@@ -201,6 +255,50 @@ export const updateField = mutation({
       recordId: args.id,
       timestamp: Date.now(),
       details: { field: args.field },
+    });
+  },
+});
+
+// Renews a Casual/Contract employee's contract, reactivating their record if
+// it had gone dormant on the previous contract's expiry. Permanent &
+// Pensionable retirement is final and does not go through this path.
+export const renewContract = mutation({
+  args: {
+    id: v.id("employees"),
+    newContractEndDate: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const employee = await ctx.db.get(args.id);
+    if (!employee) throw new ConvexError("Employee not found");
+
+    if (employee.termsOfService !== "Contract" && employee.termsOfService !== "Casual") {
+      throw new ConvexError("Only Casual or Contract employees can have their contract renewed");
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (args.newContractEndDate <= today) {
+      throw new ConvexError("New contract end date must be in the future");
+    }
+
+    const previousEndDate = employee.contractEndDate;
+
+    await ctx.db.patch(args.id, {
+      contractEndDate: args.newContractEndDate,
+      employmentStatus: "active",
+      updatedAt: Date.now(),
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "employee.renewContract",
+      recordType: "employees",
+      recordId: args.id,
+      timestamp: Date.now(),
+      details: { previousEndDate, newEndDate: args.newContractEndDate, note: args.note },
     });
   },
 });

@@ -50,7 +50,7 @@ export default function LoginPage() {
             <Image src="/logo.png" alt="Busia County Logo" width={148} height={148} className="object-contain" priority />
           </div>
           <h1 className="font-serif text-2xl font-bold tracking-tight text-center">HR Master Record</h1>
-          <p className="text-sm text-text-secondary mt-1 tracking-wide uppercase font-semibold">Busia County Government</p>
+          <p className="text-sm text-text-inverse/80 mt-1 tracking-wide uppercase font-semibold">Busia County Government</p>
         </motion.div>
 
         {/* Form Card */}

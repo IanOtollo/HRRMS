@@ -52,7 +52,6 @@ function downloadStatsCsv(stats: any) {
   const lines: string[] = ["Metric,Value"];
   lines.push(`Total Employees,${stats.totalEmployees}`);
   lines.push(`Document Verification Rate,${stats.documentVerificationRate}%`);
-  lines.push(`Leave Utilization Rate,${stats.leaveUtilizationRate}%`);
   lines.push("");
   lines.push("Department,Headcount");
   for (const d of stats.headcountByDepartment) lines.push(`"${d.name}",${d.count}`);
@@ -102,7 +101,6 @@ export default function ReportsPage() {
         stats={[
           { label: "Total Employees", value: stats.totalEmployees },
           { label: "Doc. Verification Rate", value: `${stats.documentVerificationRate}%`, accentClass: "text-emerald-600" },
-          { label: "Leave Utilization (YTD)", value: `${stats.leaveUtilizationRate}%`, accentClass: "text-blue-600" },
           { label: "Upcoming Retirements", value: stats.upcomingRetirements.length, accentClass: "text-amber-600" },
         ]}
         action={
@@ -115,7 +113,7 @@ export default function ReportsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 gap-6 mb-6">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -129,21 +127,6 @@ export default function ReportsPage() {
             <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Document Verification Rate</p>
             <p className="text-2xl font-bold text-[#202b5d]">{stats.documentVerificationRate}%</p>
             <p className="text-[11px] text-slate-400">{stats.verifiedDocs} of {stats.totalDocs} documents verified</p>
-          </div>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
-          className="bg-white border border-paper-200 shadow-sm rounded-xl p-5 flex items-center gap-4"
-        >
-          <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-            <CalendarClock size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Leave Utilization (YTD)</p>
-            <p className="text-2xl font-bold text-[#202b5d]">{stats.leaveUtilizationRate}%</p>
-            <p className="text-[11px] text-slate-400">{stats.totalLeaveDaysTaken} days taken this year</p>
           </div>
         </motion.div>
       </div>

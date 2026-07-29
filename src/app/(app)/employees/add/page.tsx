@@ -7,19 +7,35 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ChevronRight, ChevronLeft, Save, User, Briefcase, Building, Heart, CheckCircle2, Camera, X, Plus } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import Select from "@/components/Select";
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function calculateAge(dobStr: string): number {
+  const dob = new Date(dobStr);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
 
 const employeeSchema = z.object({
   // Step 1: Personal
   firstName: z.string().min(1, "Required"),
   surname: z.string().min(1, "Required"),
-  lastName: z.string().min(1, "Required"),
+  lastName: z.string().optional(),
   pfNumber: z.string().min(1, "Required"),
   nationalId: z.string().min(6, "Required"),
-  dateOfBirth: z.string().min(1, "Required"),
-  gender: z.enum(["Male", "Female", "Other"]),
+  dateOfBirth: z.string().min(1, "Required")
+    .refine((val) => val <= todayISO(), "Date of birth cannot be in the future")
+    .refine((val) => calculateAge(val) >= 18, "Employee must be at least 18 years old"),
+  gender: z.enum(["Male", "Female"], { errorMap: () => ({ message: "Required" }) }),
   phoneNumber: z.string().min(10, "Required"),
   emailAddress: z.string().email("Invalid email"),
 
@@ -28,9 +44,11 @@ const employeeSchema = z.object({
   designation: z.string().min(1, "Required"),
   jobGroup: z.string().optional(),
   payrollNumber: z.string().min(1, "Required"),
-  firstAppointmentDate: z.string().min(1, "Required"),
+  firstAppointmentDate: z.string().min(1, "Required")
+    .refine((val) => val >= todayISO(), "Date of appointment cannot be in the past"),
   termsOfService: z.string().min(1, "Required"),
   stationLocation: z.string().min(1, "Required"),
+  contractEndDate: z.string().optional(),
 
   // Step 3: Statutory
   shifNhifNumber: z.string().min(1, "Required"),
@@ -67,6 +85,7 @@ export default function AddEmployeePage() {
 
   const [nextOfKinList, setNextOfKinList] = useState<NextOfKinEntry[]>([{ ...emptyNextOfKin }]);
   const [nextOfKinError, setNextOfKinError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   const updateNextOfKin = (index: number, field: keyof NextOfKinEntry, value: string) => {
     setNextOfKinList((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
@@ -108,17 +127,18 @@ export default function AddEmployeePage() {
     handleSubmit,
     trigger,
     control,
+    watch,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: {
-      gender: "Female",
-    }
   });
+
+  const termsOfService = watch("termsOfService");
+  const isContractOrCasual = termsOfService === "Contract" || termsOfService === "Casual";
 
   const processNextStep = async () => {
     let fieldsToValidate: any[] = [];
-    if (currentStep === 1) fieldsToValidate = ['firstName', 'surname', 'lastName', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
+    if (currentStep === 1) fieldsToValidate = ['firstName', 'surname', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
     if (currentStep === 2) fieldsToValidate = ['departmentId', 'designation', 'payrollNumber', 'firstAppointmentDate', 'termsOfService', 'stationLocation'];
     if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'bankName', 'branchName'];
 
@@ -140,6 +160,7 @@ export default function AddEmployeePage() {
       return;
     }
     setNextOfKinError("");
+    setSubmitError("");
 
     setIsSubmitting(true);
     try {
@@ -173,11 +194,14 @@ export default function AddEmployeePage() {
           branchName: data.branchName,
         },
         nextOfKin: completeNextOfKin.length > 0 ? completeNextOfKin : undefined,
+        contractEndDate: isContractOrCasual ? (data.contractEndDate || undefined) : undefined,
       });
 
       router.push("/employees");
     } catch (error) {
-      console.error(error);
+      const message = error instanceof ConvexError ? String(error.data) : "Failed to save employee. Please try again.";
+      setSubmitError(message);
+      setCurrentStep(1);
     } finally {
       setIsSubmitting(false);
     }
@@ -192,6 +216,12 @@ export default function AddEmployeePage() {
       <div className="mb-4">
         <h1 className="text-xl font-bold text-[#202b5d]">Onboard New Employee</h1>
       </div>
+
+      {submitError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-[13px] font-medium rounded">
+          {submitError}
+        </div>
+      )}
 
       {/* Progress Stepper */}
       <div className="bg-white rounded border border-paper-200 shadow-sm p-4 mb-4">
@@ -296,7 +326,7 @@ export default function AddEmployeePage() {
               </div>
 
               <div className="relative">
-                <label className={labelClass}>Last Name</label>
+                <label className={labelClass}>Last Name (Optional)</label>
                 <input {...register("lastName")} className={inputClass} />
                 {errors.lastName && <p className={errorClass}>{errors.lastName.message}</p>}
               </div>
@@ -315,7 +345,7 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Date of Birth</label>
-                <input type="date" {...register("dateOfBirth")} className={inputClass} />
+                <input type="date" max={todayISO()} {...register("dateOfBirth")} className={inputClass} />
                 {errors.dateOfBirth && <p className={errorClass}>{errors.dateOfBirth.message}</p>}
               </div>
 
@@ -326,16 +356,17 @@ export default function AddEmployeePage() {
                   control={control}
                   render={({ field }) => (
                     <Select
-                      value={field.value}
+                      value={field.value ?? ""}
                       onChange={field.onChange}
+                      placeholder="Select..."
                       options={[
-                        { value: "Female", label: "Female" },
                         { value: "Male", label: "Male" },
-                        { value: "Other", label: "Other" },
+                        { value: "Female", label: "Female" },
                       ]}
                     />
                   )}
                 />
+                {errors.gender && <p className={errorClass}>{errors.gender.message}</p>}
               </div>
 
               <div className="relative">
@@ -421,7 +452,7 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Date of Appointment</label>
-                <input type="date" {...register("firstAppointmentDate")} className={inputClass} />
+                <input type="date" min={todayISO()} {...register("firstAppointmentDate")} className={inputClass} />
                 {errors.firstAppointmentDate && <p className={errorClass}>{errors.firstAppointmentDate.message}</p>}
               </div>
 
@@ -430,6 +461,14 @@ export default function AddEmployeePage() {
                 <input {...register("stationLocation")} className={inputClass} />
                 {errors.stationLocation && <p className={errorClass}>{errors.stationLocation.message}</p>}
               </div>
+
+              {isContractOrCasual && (
+                <div className="relative">
+                  <label className={labelClass}>Contract End Date</label>
+                  <input type="date" min={todayISO()} {...register("contractEndDate")} className={inputClass} />
+                  {errors.contractEndDate && <p className={errorClass}>{errors.contractEndDate.message}</p>}
+                </div>
+              )}
 
             </div>
           </div>
@@ -557,7 +596,8 @@ export default function AddEmployeePage() {
             </button>
           ) : (
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit(onSubmit)}
               disabled={isSubmitting}
               className="px-4 py-1.5 text-[13px] bg-[#9ECA3E] hover:bg-[#7A9E2D] text-white font-bold rounded flex items-center transition-colors shadow-sm disabled:opacity-70"
             >

@@ -12,6 +12,7 @@ import EmployeePicker from "@/components/EmployeePicker";
 import PageHeader from "@/components/PageHeader";
 import Select from "@/components/Select";
 import SlideOver from "@/components/SlideOver";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const STAGE_LABELS: Record<string, string> = {
   warning: "Warning Letter",
@@ -259,6 +260,7 @@ function CasePortalBody({
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
+  const [pendingStage, setPendingStage] = useState<string | null>(null);
 
   useEffect(() => {
     setNotes(record.restrictedNotes ?? "");
@@ -268,13 +270,14 @@ function CasePortalBody({
   const canEditNotes = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
   const currentStageIndex = STAGE_ORDER.indexOf(record.stage);
 
-  const jumpToStage = async (stageValue: string) => {
-    if (stageValue === record.stage) return;
+  const confirmStage = async () => {
+    if (!pendingStage) return;
     setChangingStage(true);
     try {
-      await advanceStage({ id: record._id, stage: stageValue as any });
+      await advanceStage({ id: record._id, stage: pendingStage as any });
     } finally {
       setChangingStage(false);
+      setPendingStage(null);
     }
   };
 
@@ -321,7 +324,7 @@ function CasePortalBody({
             return (
               <button
                 key={stageValue}
-                onClick={() => jumpToStage(stageValue)}
+                onClick={() => stageValue !== record.stage && setPendingStage(stageValue)}
                 disabled={changingStage}
                 className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors text-left disabled:opacity-50 ${
                   isActive
@@ -373,6 +376,15 @@ function CasePortalBody({
       >
         Open Employee Master Record <ExternalLink size={13} />
       </Link>
+
+      <ConfirmDialog
+        open={!!pendingStage}
+        title={`Move to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`}
+        message={`Are you sure you want to move this case to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"? This updates the confidential disciplinary record.`}
+        confirmLabel="Yes, move stage"
+        onConfirm={confirmStage}
+        onCancel={() => setPendingStage(null)}
+      />
     </>
   );
 }

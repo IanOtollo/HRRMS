@@ -7,8 +7,47 @@ import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
-import { Id } from "../../../../../convex/_generated/dataModel";
+import { Id, Doc } from "../../../../../convex/_generated/dataModel";
 import { DOCUMENT_CLUSTERS } from "@/lib/documentCategories";
+import Select from "@/components/Select";
+
+function DocumentFileRow({
+  doc,
+  canVerify,
+}: {
+  doc: Doc<"documents">;
+  canVerify: boolean;
+}) {
+  const verifyDoc = useMutation(api.documents.verify);
+  const fileUrl = useQuery(api.documents.getUrl, doc.storageId ? { storageId: doc.storageId } : "skip");
+
+  return (
+    <div className="flex items-center gap-2 border border-paper-100 rounded bg-white px-2.5 py-2">
+      <p className="text-[11px] text-text-primary truncate flex-1 min-w-0">{doc.originalFilename}</p>
+      <StatusBadge state={doc.status} />
+      {fileUrl && (
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View"
+          className="w-7 h-7 flex items-center justify-center text-text-secondary bg-paper-50 hover:bg-paper-100 border border-paper-200 rounded transition-colors shrink-0"
+        >
+          <Eye size={13} />
+        </a>
+      )}
+      {doc.status === "uploaded" && canVerify && (
+        <button
+          onClick={() => verifyDoc({ documentId: doc._id })}
+          title="Verify"
+          className="w-7 h-7 flex items-center justify-center text-white bg-county-green hover:bg-county-green-dark rounded transition-colors shrink-0"
+        >
+          <ShieldCheck size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function DocumentSlot({
   employeeId,
@@ -26,16 +65,14 @@ function DocumentSlot({
   canUpload: boolean;
 }) {
   const documents = useQuery(api.documents.listByEmployee, { employeeId }) || [];
-  const doc = documents.find((d) => d.category === docKey);
+  const docs = documents.filter((d) => d.category === docKey);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const finalizeUpload = useMutation(api.documents.finalizeUpload);
-  const verifyDoc = useMutation(api.documents.verify);
-  const fileUrl = useQuery(api.documents.getUrl, doc?.storageId ? { storageId: doc.storageId } : "skip");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  const state = doc?.status ?? "missing";
+  const overallState = docs.length === 0 ? "missing" : docs.every((d) => d.status === "verified") ? "verified" : "uploaded";
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -71,125 +108,282 @@ function DocumentSlot({
         <div className="flex items-center justify-center w-10 h-10 rounded bg-white border border-paper-200 text-text-secondary group-hover:text-county-blue group-hover:border-county-blue/30 transition-colors shadow-sm">
           <FileText size={20} />
         </div>
-        <StatusBadge state={state} />
+        <StatusBadge state={overallState} />
       </div>
 
       <h3 className="text-sm font-bold text-text-primary leading-snug mb-1">{docName}</h3>
-      {doc && <p className="text-[11px] text-text-secondary truncate mb-2">{doc.originalFilename}</p>}
+      {docs.length > 0 && (
+        <p className="text-[11px] text-text-secondary mb-2">{docs.length} {docs.length === 1 ? "file" : "files"} on record</p>
+      )}
 
-      <div className="mt-auto pt-3 flex gap-2">
-        {!doc && canUpload && (
-          <>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex-1 py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
-            >
-              <Upload size={13} /> {uploading ? "Uploading..." : "Upload"}
-            </button>
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading}
-              title="Scan with phone camera"
-              className="py-1.5 px-3 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
-            >
-              <Camera size={13} /> Scan
-            </button>
-          </>
-        )}
-        {doc && fileUrl && (
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 py-1.5 text-xs font-semibold text-text-primary bg-white hover:bg-paper-50 border border-paper-200 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5"
-          >
-            <Eye size={13} /> View
-          </a>
-        )}
-        {doc && doc.status === "uploaded" && canVerify && (
+      {docs.length > 0 && (
+        <div className="space-y-1.5 mb-3">
+          {docs.map((doc) => (
+            <DocumentFileRow key={doc._id} doc={doc} canVerify={canVerify} />
+          ))}
+        </div>
+      )}
+
+      {canUpload && (
+        <div className="mt-auto pt-1 flex gap-2">
           <button
-            onClick={() => verifyDoc({ documentId: doc._id })}
-            className="flex-1 py-1.5 text-xs font-semibold text-white bg-county-green hover:bg-county-green-dark rounded transition-colors shadow-sm flex items-center justify-center gap-1.5"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex-1 py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
           >
-            <ShieldCheck size={13} /> Verify
+            <Upload size={13} /> {uploading ? "Uploading..." : docs.length > 0 ? "Add Another" : "Upload"}
           </button>
-        )}
-        <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelect} />
-        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
-      </div>
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={uploading}
+            title="Scan with phone camera"
+            className="py-1.5 px-3 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
+          >
+            <Camera size={13} /> Scan
+          </button>
+          <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelect} />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+        </div>
+      )}
     </div>
   );
 }
 
-const EDITABLE_FIELDS = [
-  { key: "designation", label: "Designation" },
-  { key: "jobGroup", label: "Job Group" },
+const EDITABLE_TEXT_FIELDS = [
+  { key: "fullName", label: "Full Name" },
+  { key: "pfNumber", label: "P/F Number" },
+  { key: "nationalId", label: "National ID" },
   { key: "phoneNumber", label: "Phone Number" },
   { key: "emailAddress", label: "Email Address" },
+  { key: "designation", label: "Designation" },
+  { key: "jobGroup", label: "Job Group" },
+  { key: "payrollNumber", label: "Payroll Number" },
   { key: "stationLocation", label: "Station / Location" },
+  { key: "shifNhifNumber", label: "SHIF / NHIF Number" },
+  { key: "nssfNumber", label: "NSSF Number" },
+  { key: "bankName", label: "Bank Name" },
+  { key: "branchName", label: "Branch Name" },
 ] as const;
+
+const EDITABLE_DATE_FIELDS = [
+  { key: "dateOfBirth", label: "Date of Birth" },
+  { key: "firstAppointmentDate", label: "Date of Appointment" },
+] as const;
+
+type EditableKey = (typeof EDITABLE_TEXT_FIELDS)[number]["key"] | (typeof EDITABLE_DATE_FIELDS)[number]["key"] | "gender" | "departmentId" | "termsOfService" | "contractEndDate";
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 function EditModal({
   employee,
+  departments,
   onClose,
 }: {
   employee: any;
+  departments: { _id: string; name: string }[];
   onClose: () => void;
 }) {
   const updateField = useMutation(api.employees.updateField);
-  const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(EDITABLE_FIELDS.map((f) => [f.key, employee[f.key] ?? ""]))
-  );
+  const [values, setValues] = useState<Record<EditableKey, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const f of EDITABLE_TEXT_FIELDS) {
+      initial[f.key] = f.key === "bankName" ? employee.bankDetails?.bankName ?? "" : f.key === "branchName" ? employee.bankDetails?.branchName ?? "" : employee[f.key] ?? "";
+    }
+    for (const f of EDITABLE_DATE_FIELDS) initial[f.key] = employee[f.key] ?? "";
+    initial.gender = employee.gender ?? "";
+    initial.departmentId = employee.departmentId ?? "";
+    initial.termsOfService = employee.termsOfService ?? "";
+    initial.contractEndDate = employee.contractEndDate ?? "";
+    return initial as Record<EditableKey, string>;
+  });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const setValue = (key: EditableKey, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
+  const isContractOrCasual = values.termsOfService === "Contract" || values.termsOfService === "Casual";
 
   const handleSave = async () => {
     setSaving(true);
+    setError("");
     try {
-      for (const field of EDITABLE_FIELDS) {
+      for (const field of EDITABLE_TEXT_FIELDS) {
+        if (field.key === "bankName" || field.key === "branchName") continue;
         if (values[field.key] !== (employee[field.key] ?? "")) {
           await updateField({ id: employee._id, field: field.key, value: values[field.key] });
         }
       }
+      for (const field of EDITABLE_DATE_FIELDS) {
+        if (values[field.key] !== (employee[field.key] ?? "")) {
+          await updateField({ id: employee._id, field: field.key, value: values[field.key] });
+        }
+      }
+      if (values.gender !== (employee.gender ?? "")) {
+        await updateField({ id: employee._id, field: "gender", value: values.gender });
+      }
+      if (values.departmentId !== (employee.departmentId ?? "")) {
+        await updateField({ id: employee._id, field: "departmentId", value: values.departmentId });
+      }
+      if (values.termsOfService !== (employee.termsOfService ?? "")) {
+        await updateField({ id: employee._id, field: "termsOfService", value: values.termsOfService });
+      }
+      if (isContractOrCasual && values.contractEndDate !== (employee.contractEndDate ?? "")) {
+        await updateField({ id: employee._id, field: "contractEndDate", value: values.contractEndDate });
+      }
+      const bankName = values.bankName;
+      const branchName = values.branchName;
+      if (bankName !== (employee.bankDetails?.bankName ?? "") || branchName !== (employee.bankDetails?.branchName ?? "")) {
+        await updateField({ id: employee._id, field: "bankDetails", value: { bankName, branchName } });
+      }
       onClose();
+    } catch (err: any) {
+      setError(err?.data ?? err?.message ?? "Failed to save changes");
     } finally {
       setSaving(false);
     }
   };
+
+  const labelClass = "block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1";
+  const inputClass = "w-full border border-slate-300 rounded h-8 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none";
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm"
+      className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm p-4"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white rounded-md shadow-xl w-[440px] overflow-hidden border border-slate-200"
+        className="bg-white rounded-md shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-slate-200 flex flex-col"
       >
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
           <h2 className="text-[14px] font-bold text-[#202b5d] flex items-center"><Edit2 size={15} className="mr-2" /> Edit Profile</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
-        <div className="p-5 space-y-4">
-          {EDITABLE_FIELDS.map((field) => (
-            <div key={field.key}>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">{field.label}</label>
-              <input
-                value={values[field.key]}
-                onChange={(e) => {
-                  const raw = field.key === "jobGroup" ? e.target.value.toUpperCase() : e.target.value;
-                  setValues((prev) => ({ ...prev, [field.key]: raw }));
-                }}
-                className="w-full border border-slate-300 rounded h-8 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none"
-              />
+        <div className="p-5 overflow-y-auto space-y-6">
+          {error && <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded p-2.5">{error}</div>}
+
+          <div>
+            <p className="text-[11px] font-bold text-[#202b5d] uppercase tracking-wider mb-2 pb-1 border-b border-paper-100">Personal</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Full Name</label>
+                <input value={values.fullName} onChange={(e) => setValue("fullName", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>P/F Number</label>
+                <input value={values.pfNumber} onChange={(e) => setValue("pfNumber", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>National ID</label>
+                <input value={values.nationalId} onChange={(e) => setValue("nationalId", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Date of Birth</label>
+                <input type="date" max={todayISO()} value={values.dateOfBirth} onChange={(e) => setValue("dateOfBirth", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Gender</label>
+                <Select
+                  value={values.gender}
+                  onChange={(v) => setValue("gender", v)}
+                  placeholder="Select..."
+                  options={[
+                    { value: "Male", label: "Male" },
+                    { value: "Female", label: "Female" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Phone Number</label>
+                <input value={values.phoneNumber} onChange={(e) => setValue("phoneNumber", e.target.value)} className={inputClass} />
+              </div>
+              <div className="md:col-span-2">
+                <label className={labelClass}>Email Address</label>
+                <input type="email" value={values.emailAddress} onChange={(e) => setValue("emailAddress", e.target.value)} className={inputClass} />
+              </div>
             </div>
-          ))}
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-[#202b5d] uppercase tracking-wider mb-2 pb-1 border-b border-paper-100">Career & Assignment</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Department</label>
+                <Select
+                  value={values.departmentId}
+                  onChange={(v) => setValue("departmentId", v)}
+                  placeholder="Select..."
+                  options={departments.map((d) => ({ value: d._id, label: d.name }))}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Designation</label>
+                <input value={values.designation} onChange={(e) => setValue("designation", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Job Group</label>
+                <input value={values.jobGroup} onChange={(e) => setValue("jobGroup", e.target.value.toUpperCase())} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Payroll Number</label>
+                <input value={values.payrollNumber} onChange={(e) => setValue("payrollNumber", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Terms of Service</label>
+                <Select
+                  value={values.termsOfService}
+                  onChange={(v) => setValue("termsOfService", v)}
+                  placeholder="Select..."
+                  options={[
+                    { value: "Permanent & Pensionable", label: "P&P" },
+                    { value: "Contract", label: "Contract" },
+                    { value: "Casual", label: "Casual" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Date of Appointment</label>
+                <input type="date" value={values.firstAppointmentDate} onChange={(e) => setValue("firstAppointmentDate", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Station / Location</label>
+                <input value={values.stationLocation} onChange={(e) => setValue("stationLocation", e.target.value)} className={inputClass} />
+              </div>
+              {isContractOrCasual && (
+                <div>
+                  <label className={labelClass}>Contract End Date</label>
+                  <input type="date" value={values.contractEndDate} onChange={(e) => setValue("contractEndDate", e.target.value)} className={inputClass} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-[#202b5d] uppercase tracking-wider mb-2 pb-1 border-b border-paper-100">Statutory & Financial</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>SHIF / NHIF Number</label>
+                <input value={values.shifNhifNumber} onChange={(e) => setValue("shifNhifNumber", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>NSSF Number</label>
+                <input value={values.nssfNumber} onChange={(e) => setValue("nssfNumber", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Bank Name</label>
+                <input value={values.bankName} onChange={(e) => setValue("bankName", e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Branch Name</label>
+                <input value={values.branchName} onChange={(e) => setValue("branchName", e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">
+        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2 shrink-0">
           <button onClick={onClose} className="px-4 h-8 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded transition-colors">Cancel</button>
           <button
             onClick={handleSave}
@@ -276,8 +470,13 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
   const allDocuments = useQuery(api.documents.listByEmployee, { employeeId }) || [];
   const generatePhotoUploadUrl = useMutation(api.documents.generateUploadUrl);
   const updateEmployeeField = useMutation(api.employees.updateField);
+  const renewContract = useMutation(api.employees.renewContract);
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const [renewDate, setRenewDate] = useState("");
+  const [renewSubmitting, setRenewSubmitting] = useState(false);
+  const [renewError, setRenewError] = useState("");
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
   const canUpload =
@@ -322,6 +521,29 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
   const departmentName = departments.find((d) => d._id === employee.departmentId)?.name ?? "—";
   const initials = employee.fullName.split(" ").map((p: string) => p[0]).slice(0, 2).join("").toUpperCase();
 
+  const isContractOrCasual = employee.termsOfService === "Contract" || employee.termsOfService === "Casual";
+  const isExpiredContract = isContractOrCasual && !!employee.contractEndDate && employee.contractEndDate < todayISO();
+  const isExited = employee.employmentStatus === "retired" || employee.employmentStatus === "terminated";
+  const isFrozen = isExited || isExpiredContract;
+  const canRenew = isExpiredContract && canEdit;
+
+  const handleRenew = async () => {
+    if (!renewDate) {
+      setRenewError("Choose a new contract end date");
+      return;
+    }
+    setRenewSubmitting(true);
+    setRenewError("");
+    try {
+      await renewContract({ id: employeeId, newContractEndDate: renewDate });
+      setRenewDate("");
+    } catch (err: any) {
+      setRenewError(err?.data ?? err?.message ?? "Failed to renew contract");
+    } finally {
+      setRenewSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 p-4 md:p-6 pb-20 print:p-0 print:max-w-none print:m-0">
     <div className="print:hidden space-y-6">
@@ -329,6 +551,49 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
         <ChevronLeft size={16} className="mr-1" />
         Back to Directory
       </Link>
+
+      {isFrozen && (
+        <div className="bg-rust-700/5 border border-rust-700/20 rounded p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-rust-700">
+              {isExited
+                ? `Record frozen — employee has ${employee.employmentStatus === "retired" ? "retired" : "exited"}`
+                : "Record frozen — contract has expired"}
+            </p>
+            <p className="text-[12px] text-text-secondary mt-0.5">
+              {isExited
+                ? employee.employmentStatus === "retired"
+                  ? "Retirement is final under Permanent & Pensionable terms and cannot be renewed."
+                  : "This record is read-only. Reactivate the employee's status from the exit pipeline if this was in error."
+                : "This Casual/Contract employee's record is read-only until the contract is renewed."}
+            </p>
+          </div>
+          {canRenew && (
+            <div className="flex items-end gap-2 shrink-0">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">New Contract End Date</label>
+                <input
+                  type="date"
+                  min={todayISO()}
+                  value={renewDate}
+                  onChange={(e) => setRenewDate(e.target.value)}
+                  className="border border-slate-300 rounded h-8 px-2.5 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={handleRenew}
+                disabled={renewSubmitting}
+                className="h-8 px-3 text-[12px] font-bold bg-[#202b5d] text-white hover:bg-[#161f47] rounded transition-colors shadow-sm disabled:opacity-60"
+              >
+                {renewSubmitting ? "Renewing..." : "Renew Contract"}
+              </button>
+            </div>
+          )}
+          {renewError && <p className="text-[11px] text-red-700 w-full">{renewError}</p>}
+        </div>
+      )}
+
+      <div className={isFrozen ? "opacity-60 grayscale pointer-events-none space-y-6" : "space-y-6"}>
 
       {/* Header Band */}
       <motion.div
@@ -380,6 +645,11 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
               {employee.jobGroup && (
                 <span className="font-mono text-sm bg-paper-100 px-2 py-1 rounded text-text-primary border border-paper-200 shadow-sm">
                   Job Group {employee.jobGroup}
+                </span>
+              )}
+              {employee.gender && (
+                <span className="font-mono text-sm bg-paper-100 px-2 py-1 rounded text-text-primary border border-paper-200 shadow-sm">
+                  {employee.gender}
                 </span>
               )}
               <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-county-green/10 text-county-green-dark border border-county-green/20">
@@ -495,8 +765,10 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
         </div>
       </div>
 
+      </div>
+
       <AnimatePresence>
-        {editOpen && <EditModal employee={employee} onClose={() => setEditOpen(false)} />}
+        {editOpen && <EditModal employee={employee} departments={departments} onClose={() => setEditOpen(false)} />}
         {emergencyOpen && (
           <EmergencyContactsModal contacts={employee.nextOfKin ?? []} onClose={() => setEmergencyOpen(false)} />
         )}
