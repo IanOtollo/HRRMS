@@ -32,6 +32,7 @@ function DocumentSlot({
   const verifyDoc = useMutation(api.documents.verify);
   const fileUrl = useQuery(api.documents.getUrl, doc?.storageId ? { storageId: doc.storageId } : "skip");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const state = doc?.status ?? "missing";
@@ -60,6 +61,7 @@ function DocumentSlot({
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
   };
 
@@ -77,13 +79,23 @@ function DocumentSlot({
 
       <div className="mt-auto pt-3 flex gap-2">
         {!doc && canUpload && (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="w-full py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
-          >
-            <Upload size={13} /> {uploading ? "Uploading..." : "Upload Document"}
-          </button>
+          <>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex-1 py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              <Upload size={13} /> {uploading ? "Uploading..." : "Upload"}
+            </button>
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploading}
+              title="Scan with phone camera"
+              className="py-1.5 px-3 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              <Camera size={13} /> Scan
+            </button>
+          </>
         )}
         {doc && fileUrl && (
           <a
@@ -104,6 +116,7 @@ function DocumentSlot({
           </button>
         )}
         <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelect} />
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
       </div>
     </div>
   );

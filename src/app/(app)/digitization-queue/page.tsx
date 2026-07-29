@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FileDigit, Plus, X, UploadCloud, CheckCircle2 } from "lucide-react";
+import { FileDigit, Plus, X, UploadCloud, CheckCircle2, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -24,6 +24,7 @@ export default function DigitizationPage() {
   const [uploading, setUploading] = useState(false);
   const [actionError, setActionError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
 
@@ -185,6 +186,22 @@ export default function DigitizationPage() {
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="w-full py-2 text-[12px] font-bold text-county-blue bg-white hover:bg-slate-50 border border-county-blue/30 rounded-md transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <Camera size={14} /> Scan with Phone Camera
+                </button>
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Employee</label>

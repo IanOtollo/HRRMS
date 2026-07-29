@@ -1,7 +1,7 @@
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { createAccount } from "@convex-dev/auth/server";
+import { createAccount, modifyAccountCredentials } from "@convex-dev/auth/server";
 import { requireRole } from "./lib/rbac";
 import { userRoleValidator } from "./schema";
 import { api, internal } from "./_generated/api";
@@ -78,6 +78,43 @@ export const create = action({
     });
 
     return user._id;
+  },
+});
+
+export const changePassword = action({
+  args: {
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const caller = await ctx.runQuery(api.users.me, {});
+    if (!caller || !caller.email) {
+      throw new ConvexError("Not authenticated");
+    }
+
+    if (args.newPassword.length < 8) {
+      throw new ConvexError("New password must be at least 8 characters");
+    }
+
+    try {
+      await ctx.runAction(api.auth.signIn, {
+        provider: "password",
+        params: { email: caller.email, password: args.currentPassword, flow: "signIn" },
+      });
+    } catch {
+      throw new ConvexError("Current password is incorrect");
+    }
+
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: caller.email, secret: args.newPassword },
+    });
+
+    await ctx.runMutation(internal.users.logAudit, {
+      userId: caller._id,
+      userName: caller.name ?? "Unknown",
+      action: "user.changePassword",
+    });
   },
 });
 
