@@ -89,6 +89,69 @@ export const confirmAttendance = mutation({
   },
 });
 
+export const discardTraining = mutation({
+  args: {
+    id: v.id("trainingRecords"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const record = await ctx.db.get(args.id);
+    if (!record) throw new ConvexError("Training record not found");
+    if (record.attendanceConfirmed) throw new ConvexError("Cannot discard a training that already has confirmed attendance");
+
+    await ctx.db.patch(args.id, { status: "discarded", discardReason: args.reason });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "training.discard",
+      recordType: "trainingRecords",
+      recordId: args.id,
+      timestamp: Date.now(),
+      details: { reason: args.reason },
+    });
+  },
+});
+
+export const deferTraining = mutation({
+  args: {
+    id: v.id("trainingRecords"),
+    newStartDate: v.string(),
+    newEndDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const record = await ctx.db.get(args.id);
+    if (!record) throw new ConvexError("Training record not found");
+    if (record.attendanceConfirmed) throw new ConvexError("Cannot defer a training that already has confirmed attendance");
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (args.newStartDate < today) throw new ConvexError("New start date cannot be in the past");
+    if (args.newEndDate < args.newStartDate) throw new ConvexError("New end date cannot be before the new start date");
+
+    const previousDates = { startDate: record.startDate, endDate: record.endDate };
+
+    await ctx.db.patch(args.id, {
+      startDate: args.newStartDate,
+      endDate: args.newEndDate,
+      status: "deferred",
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "training.defer",
+      recordType: "trainingRecords",
+      recordId: args.id,
+      timestamp: Date.now(),
+      details: { previousDates, newStartDate: args.newStartDate, newEndDate: args.newEndDate },
+    });
+  },
+});
+
 export const updateNotes = mutation({
   args: {
     id: v.id("trainingRecords"),

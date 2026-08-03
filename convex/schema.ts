@@ -172,6 +172,11 @@ export default defineSchema({
     attendanceConfirmed: v.boolean(),
     notes: v.optional(v.string()),
     documentIds: v.array(v.id("documents")),
+    // Undefined means the application is still on its originally scheduled
+    // dates. "discarded" withdraws it; "deferred" marks it as rescheduled
+    // (startDate/endDate hold the new dates) so the change is visible.
+    status: v.optional(v.union(v.literal("discarded"), v.literal("deferred"))),
+    discardReason: v.optional(v.string()),
   }).index("by_employee", ["employeeId"]),
 
   disciplinaryRecords: defineTable({
