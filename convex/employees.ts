@@ -1,6 +1,19 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { requireRole, requireDepartmentScope } from "./lib/rbac";
+
+// County service has no minors — enforced here as well as in the UI, since
+// a direct API call could otherwise skip the frontend's validation.
+function ageAt(dobStr: string, asOfStr: string): number {
+  const dob = new Date(dobStr);
+  const asOf = new Date(asOfStr);
+  let age = asOf.getFullYear() - dob.getFullYear();
+  const monthDiff = asOf.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && asOf.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
 
 export const list = query({
   args: {
@@ -62,8 +75,6 @@ export const list = query({
     return results;
   },
 });
-
-import { ConvexError } from "convex/values";
 
 const UNIQUE_FIELD_INDEX = {
   pfNumber: "by_pf",
@@ -193,6 +204,16 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
+    const today = new Date().toISOString().slice(0, 10);
+    if (args.dateOfBirth) {
+      if (args.dateOfBirth > today) {
+        throw new ConvexError("Date of birth cannot be in the future");
+      }
+      if (ageAt(args.dateOfBirth, args.firstAppointmentDate) < 18) {
+        throw new ConvexError("Employee must have been at least 18 years old on the date of appointment");
+      }
+    }
+
     const pfClash = await ctx.db
       .query("employees")
       .withIndex("by_pf", (q) => q.eq("pfNumber", args.pfNumber))
@@ -279,6 +300,20 @@ export const updateField = mutation({
         .collect();
       if (matches.some((m) => m._id !== args.id)) {
         throw new ConvexError(`${check.label} ${args.value} is already assigned to another employee`);
+      }
+    }
+
+    if (args.field === "dateOfBirth" || args.field === "firstAppointmentDate") {
+      const dob = args.field === "dateOfBirth" ? args.value : employee.dateOfBirth;
+      const appointmentDate = args.field === "firstAppointmentDate" ? args.value : employee.firstAppointmentDate;
+      const today = new Date().toISOString().slice(0, 10);
+      if (dob) {
+        if (dob > today) {
+          throw new ConvexError("Date of birth cannot be in the future");
+        }
+        if (appointmentDate && ageAt(dob, appointmentDate) < 18) {
+          throw new ConvexError("Employee must have been at least 18 years old on the date of appointment");
+        }
       }
     }
 

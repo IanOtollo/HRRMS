@@ -212,6 +212,17 @@ type EditableKey = (typeof EDITABLE_TEXT_FIELDS)[number]["key"] | (typeof EDITAB
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+function calculateAgeAt(dobStr: string, asOfStr: string): number {
+  const dob = new Date(dobStr);
+  const asOf = new Date(asOfStr);
+  let age = asOf.getFullYear() - dob.getFullYear();
+  const monthDiff = asOf.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && asOf.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 function EditModal({
   employee,
   departments,
@@ -249,6 +260,18 @@ function EditModal({
   const handleSave = async () => {
     if (hasDuplicateField) {
       setError("One of P/F Number, National ID, Phone, or Email is already in use by another employee.");
+      return;
+    }
+    if (values.dateOfBirth > todayISO()) {
+      setError("Date of birth cannot be in the future");
+      return;
+    }
+    if (calculateAgeAt(values.dateOfBirth, todayISO()) < 18) {
+      setError("Employee must be at least 18 years old");
+      return;
+    }
+    if (values.dateOfBirth && values.firstAppointmentDate && calculateAgeAt(values.dateOfBirth, values.firstAppointmentDate) < 18) {
+      setError("Employee must have been at least 18 years old on the date of appointment");
       return;
     }
     setSaving(true);

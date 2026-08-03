@@ -16,12 +16,12 @@ import { useFieldAvailability } from "@/hooks/useFieldAvailability";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-function calculateAge(dobStr: string): number {
+function calculateAge(dobStr: string, asOfStr: string = todayISO()): number {
   const dob = new Date(dobStr);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+  const asOf = new Date(asOfStr);
+  let age = asOf.getFullYear() - dob.getFullYear();
+  const monthDiff = asOf.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && asOf.getDate() < dob.getDate())) {
     age--;
   }
   return age;
@@ -57,6 +57,20 @@ const employeeSchema = z.object({
   nssfNumber: z.string().min(1, "Required"),
   bankName: z.string().min(1, "Required"),
   branchName: z.string().min(1, "Required"),
+}).superRefine((data, ctx) => {
+  // Not just "18 today" — the employee must have actually been 18+ on the
+  // date they were appointed (matters when back-dating a historical hire).
+  if (
+    data.dateOfBirth &&
+    data.firstAppointmentDate &&
+    calculateAge(data.dateOfBirth, data.firstAppointmentDate) < 18
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Employee must have been at least 18 years old on the date of appointment",
+      path: ["firstAppointmentDate"],
+    });
+  }
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
