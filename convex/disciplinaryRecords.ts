@@ -25,6 +25,17 @@ export const list = query({
   },
 });
 
+// Waterfall order — a case can only move forward through this list, never
+// back (e.g. once interdicted, it cannot return to "warning" territory).
+const STAGE_ORDER = [
+  "preliminary_inquiry",
+  "investigation",
+  "show_cause",
+  "interdiction_suspension",
+  "board_determination",
+  "closed",
+];
+
 const stageValidator = v.union(
   v.literal("preliminary_inquiry"),
   v.literal("investigation"),
@@ -70,6 +81,16 @@ export const openCase = mutation({
       documentIds: [],
       restrictedNotes: args.restrictedNotes,
     });
+
+    // A second disciplinary case, regardless of outcome, permanently marks
+    // the employee as blacklisted — this never gets cleared automatically.
+    const priorCases = await ctx.db
+      .query("disciplinaryRecords")
+      .withIndex("by_employee", (q) => q.eq("employeeId", args.employeeId))
+      .collect();
+    if (priorCases.length >= 2 && !employee.isBlacklisted) {
+      await ctx.db.patch(args.employeeId, { isBlacklisted: true, updatedAt: Date.now() });
+    }
 
     await ctx.db.insert("auditLog", {
       userId: user._id,
@@ -121,6 +142,12 @@ export const advanceStage = mutation({
 
     const record = await ctx.db.get(args.id);
     if (!record) throw new ConvexError("Disciplinary record not found");
+
+    const currentIndex = STAGE_ORDER.indexOf(record.stage);
+    const nextIndex = STAGE_ORDER.indexOf(args.stage);
+    if (nextIndex < currentIndex) {
+      throw new ConvexError("Disciplinary cases can only move forward — this stage cannot be reversed");
+    }
 
     if (args.stage === "interdiction_suspension" && !args.interdictionType) {
       throw new ConvexError("Specify whether this is an Interdiction or a Suspension");

@@ -29,13 +29,27 @@ const stageStyles: Record<string, string> = {
   finalized: "bg-green-100 text-green-700",
 };
 
+// Legal grounds for leaving Kenyan county public service.
 const EXIT_TYPE_LABELS: Record<string, string> = {
-  retirement: "Retirement",
+  retirement_age: "Mandatory Retirement (Age Limit)",
   resignation: "Resignation",
-  termination: "Termination",
+  ill_health: "Retirement on Medical Grounds (Ill Health)",
+  abolition_of_office: "Abolition of Office",
+  public_interest: "Retirement in the Public Interest",
+  contract_expiry: "Contract Expiry",
+  dismissal: "Dismissal (Disciplinary)",
+  death: "Death in Service",
 };
 
+// employmentStatus only distinguishes "retired" vs "terminated" — these
+// three exit types resolve to "retired" on finalization, everything else
+// resolves to "terminated".
+const RETIREMENT_LIKE_EXIT_TYPES = ["retirement_age", "ill_health", "public_interest"];
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const resultingStatusLabel = (exitType: string) =>
+  RETIREMENT_LIKE_EXIT_TYPES.includes(exitType) ? "Retired" : "Terminated";
 
 export default function RetirementExitPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -46,10 +60,11 @@ export default function RetirementExitPage() {
   const renewContract = useMutation(api.employees.renewContract);
 
   const [selectedEmployee, setSelectedEmployee] = useState<Doc<"employees"> | null>(null);
-  const [exitType, setExitType] = useState("retirement");
+  const [exitType, setExitType] = useState("retirement_age");
   const [noticeDate, setNoticeDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [confirmInitiateExit, setConfirmInitiateExit] = useState(false);
 
   const [renewTarget, setRenewTarget] = useState<Doc<"employees"> | null>(null);
   const [renewDate, setRenewDate] = useState("");
@@ -94,16 +109,23 @@ export default function RetirementExitPage() {
 
   const resetForm = () => {
     setSelectedEmployee(null);
-    setExitType("retirement");
+    setExitType("retirement_age");
     setNoticeDate("");
     setActionError("");
   };
 
-  const handleSubmit = async () => {
+  const requestSubmit = () => {
     if (!selectedEmployee || !noticeDate) {
       setActionError("Select an employee and a notice date");
       return;
     }
+    setActionError("");
+    setConfirmInitiateExit(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedEmployee || !noticeDate) return;
+    setConfirmInitiateExit(false);
     setSubmitting(true);
     try {
       await initiateExit({
@@ -304,7 +326,7 @@ export default function RetirementExitPage() {
           <>
             <button onClick={() => { setIsDrawerOpen(false); resetForm(); }} className="px-4 h-9 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
             <button
-              onClick={handleSubmit}
+              onClick={requestSubmit}
               disabled={submitting}
               className="px-4 h-9 text-[12px] font-bold bg-[#202b5d] text-white hover:bg-[#161f47] rounded-lg transition-colors shadow-sm disabled:opacity-60"
             >
@@ -319,22 +341,31 @@ export default function RetirementExitPage() {
         <div>
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Employee</label>
           <EmployeePicker value={selectedEmployee} onChange={setSelectedEmployee} />
+          {selectedEmployee && (
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Selected: <span className="font-bold text-slate-700">{selectedEmployee.fullName}</span> · P/F {selectedEmployee.pfNumber}
+            </p>
+          )}
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Exit Type</label>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Grounds for Exit</label>
           <Select
             value={exitType}
             onChange={setExitType}
-            options={[
-              { value: "retirement", label: "Retirement" },
-              { value: "resignation", label: "Resignation" },
-              { value: "termination", label: "Termination" },
-            ]}
+            options={Object.entries(EXIT_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
           />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Effective Date of Exit</label>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+            {exitType === "resignation" ? "Date of Resignation Letter" : "Effective Date of Exit"}
+          </label>
           <input type="date" value={noticeDate} onChange={(e) => setNoticeDate(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" />
+          {exitType === "resignation" && noticeDate && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Resignation takes effect 30 days from this date — around{" "}
+              {new Date(new Date(noticeDate).getTime() + 30 * 86400000).toISOString().slice(0, 10)}.
+            </p>
+          )}
         </div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start">
           <p className="text-[11px] text-yellow-800">
@@ -358,6 +389,19 @@ export default function RetirementExitPage() {
           />
         )}
       </SlideOver>
+
+      <ConfirmDialog
+        open={confirmInitiateExit}
+        title="Confirm employee"
+        message={
+          selectedEmployee
+            ? `Start a ${EXIT_TYPE_LABELS[exitType]} clearance pipeline for ${selectedEmployee.fullName} (P/F ${selectedEmployee.pfNumber})? Double-check this is the correct employee before continuing.`
+            : ""
+        }
+        confirmLabel="Yes, this is the correct employee"
+        onConfirm={handleSubmit}
+        onCancel={() => setConfirmInitiateExit(false)}
+      />
     </div>
   );
 }
@@ -435,7 +479,7 @@ function ClearancePortalBody({
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
           <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
           <p className="text-[11px] text-amber-800">
-            Marking this pipeline as <strong>Finalized</strong> will automatically update {employee?.fullName ?? "the employee"}'s employment status to {record.exitType === "retirement" ? "Retired" : "Terminated"}.
+            Marking this pipeline as <strong>Finalized</strong> will automatically update {employee?.fullName ?? "the employee"}'s employment status to {resultingStatusLabel(record.exitType)}.
           </p>
         </div>
       )}
@@ -497,8 +541,8 @@ function ClearancePortalBody({
         title={`Move to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`}
         message={
           pendingStage === "finalized"
-            ? `This will finalize the exit and update ${employee?.fullName ?? "the employee"}'s employment status to ${record.exitType === "retirement" ? "Retired" : "Terminated"}. This cannot be undone from here.`
-            : `Are you sure you want to move this clearance pipeline to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`
+            ? `This will finalize the exit and update ${employee?.fullName ?? "the employee"}'s employment status to ${resultingStatusLabel(record.exitType)}. This cannot be undone from here.`
+            : `Confirm: move ${employee?.fullName ?? "this employee"}'s clearance pipeline to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`
         }
         confirmLabel="Yes, move stage"
         onConfirm={confirmStage}

@@ -24,7 +24,6 @@ import type * as lib_rbac from "../lib/rbac.js";
 import type * as notifications from "../notifications.js";
 import type * as otp from "../otp.js";
 import type * as otpNode from "../otpNode.js";
-import type * as performanceTemplates from "../performanceTemplates.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as settings from "../settings.js";
@@ -54,7 +53,6 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   otp: typeof otp;
   otpNode: typeof otpNode;
-  performanceTemplates: typeof performanceTemplates;
   reports: typeof reports;
   seed: typeof seed;
   settings: typeof settings;

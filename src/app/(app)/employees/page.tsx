@@ -209,7 +209,16 @@ function EmployeesPageInner() {
                     className="hover:bg-slate-50 group transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-2.5 text-[12px] font-medium text-slate-700">{emp.pfNumber}</td>
-                    <td className="px-4 py-2.5 text-[13px] font-bold text-[#202b5d]">{emp.fullName}</td>
+                    <td className="px-4 py-2.5 text-[13px] font-bold text-[#202b5d]">
+                      <span className="inline-flex items-center gap-1.5">
+                        {emp.fullName}
+                        {emp.isBlacklisted && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rust-700 text-white uppercase tracking-wider">
+                            Blacklisted
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5 text-[12px] text-slate-600">{departmentName(emp.departmentId)}</td>
                     <td className="px-4 py-2.5 text-[12px] text-slate-600">{emp.designation}</td>
                     <td className="px-4 py-2.5">

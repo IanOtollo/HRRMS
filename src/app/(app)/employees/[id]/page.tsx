@@ -680,7 +680,14 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
             )}
           </div>
           <div className="flex flex-col justify-center">
-            <h1 className="font-serif text-display-xl font-semibold text-text-primary mb-1">{employee.fullName}</h1>
+            <h1 className="font-serif text-display-xl font-semibold text-text-primary mb-1 flex items-center gap-2.5">
+              {employee.fullName}
+              {employee.isBlacklisted && (
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rust-700 text-white uppercase tracking-wider align-middle">
+                  Blacklisted
+                </span>
+              )}
+            </h1>
             <div className="text-body-l text-text-secondary mb-3">{employee.designation} · {departmentName}</div>
 
             <div className="flex flex-wrap items-center gap-3">

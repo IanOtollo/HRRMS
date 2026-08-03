@@ -33,6 +33,28 @@ export const listByCycle = query({
   },
 });
 
+export const get = query({
+  args: { id: v.id("appraisals") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [
+      "super_admin",
+      "hr_director",
+      "records_officer",
+      "department_viewer",
+    ]);
+
+    const appraisal = await ctx.db.get(args.id);
+    if (!appraisal) return null;
+
+    const employee = await ctx.db.get(appraisal.employeeId);
+    if (user.role === "department_viewer" && employee?.departmentId !== user.departmentId) {
+      throw new ConvexError("Access denied: Department scope mismatch");
+    }
+
+    return { ...appraisal, employee };
+  },
+});
+
 export const initiateCycle = mutation({
   args: {
     cycleLabel: v.string(),
@@ -127,6 +149,104 @@ export const saveComments = mutation({
       userId: user._id,
       userName: user.name ?? "Unknown",
       action: "appraisal.saveComments",
+      recordType: "appraisals",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+// CG/SPA Form 3 — Agreed Performance Targets & Achievements, plus any
+// additional assignments taken on outside the agreed targets.
+export const saveTargets = mutation({
+  args: {
+    id: v.id("appraisals"),
+    targets: v.array(v.object({
+      target: v.string(),
+      achievement: v.string(),
+    })),
+    additionalAssignments: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const appraisal = await ctx.db.get(args.id);
+    if (!appraisal) throw new ConvexError("Appraisal not found");
+
+    await ctx.db.patch(args.id, {
+      targets: args.targets,
+      additionalAssignments: args.additionalAssignments,
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "appraisal.saveTargets",
+      recordType: "appraisals",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+// CG/SPA Form 5 — Individual Work Plan for the reporting period.
+export const saveWorkPlan = mutation({
+  args: {
+    id: v.id("appraisals"),
+    workPlanPeriod: v.string(),
+    workPlan: v.array(v.object({
+      directorateObjective: v.string(),
+      individualTargets: v.string(),
+      keyActivities: v.string(),
+      resourcesRequired: v.string(),
+      performanceIndicators: v.string(),
+      timeFrame: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const appraisal = await ctx.db.get(args.id);
+    if (!appraisal) throw new ConvexError("Appraisal not found");
+
+    await ctx.db.patch(args.id, {
+      workPlanPeriod: args.workPlanPeriod,
+      workPlan: args.workPlan,
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "appraisal.saveWorkPlan",
+      recordType: "appraisals",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+// CG/SPA Form 4 line item — the MPMC/CIPMC recommendation for this officer.
+export const saveRecommendation = mutation({
+  args: {
+    id: v.id("appraisals"),
+    mpmcRecommendation: v.string(),
+    mpmcRemarks: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+
+    const appraisal = await ctx.db.get(args.id);
+    if (!appraisal) throw new ConvexError("Appraisal not found");
+
+    await ctx.db.patch(args.id, {
+      mpmcRecommendation: args.mpmcRecommendation,
+      mpmcRemarks: args.mpmcRemarks,
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "appraisal.saveRecommendation",
       recordType: "appraisals",
       recordId: args.id,
       timestamp: Date.now(),

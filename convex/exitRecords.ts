@@ -29,9 +29,14 @@ export const list = query({
 });
 
 const exitTypeValidator = v.union(
-  v.literal("retirement"),
+  v.literal("retirement_age"),
   v.literal("resignation"),
-  v.literal("termination")
+  v.literal("ill_health"),
+  v.literal("abolition_of_office"),
+  v.literal("public_interest"),
+  v.literal("contract_expiry"),
+  v.literal("dismissal"),
+  v.literal("death")
 );
 
 const stageValidator = v.union(
@@ -120,7 +125,10 @@ export const advanceStage = mutation({
     });
 
     if (isFinalizing) {
-      const newStatus = record.exitType === "retirement" ? "retired" : "terminated";
+      // employmentStatus only has "retired" / "terminated" as exit states;
+      // the exitType itself is the source of truth for the legal grounds.
+      const retirementLike = ["retirement_age", "ill_health", "public_interest"];
+      const newStatus = retirementLike.includes(record.exitType) ? "retired" : "terminated";
       await ctx.db.patch(record.employeeId, {
         employmentStatus: newStatus,
         updatedAt: Date.now(),

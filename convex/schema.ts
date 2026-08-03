@@ -93,6 +93,9 @@ export default defineSchema({
         dateOfBirth: v.string(),
       })
     )),
+    // Permanently set once an employee has a second disciplinary case
+    // opened (regardless of that case's outcome) — never auto-cleared.
+    isBlacklisted: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -148,6 +151,10 @@ export default defineSchema({
     daysTakenYtd: v.number(),
   }).index("by_employee_year", ["employeeId", "year"]),
 
+  // Digital equivalent of the CG/SPA appraisal forms: Form 3 (agreed
+  // performance targets & achievements) and Form 5 (individual work plan)
+  // are keyed in per employee per cycle; MPMC/CIPMC recommendation is the
+  // per-officer line item that rolls up into CG/SPA Form 4.
   appraisals: defineTable({
     employeeId: v.id("employees"),
     cycleLabel: v.string(),
@@ -160,6 +167,28 @@ export default defineSchema({
     comments: v.optional(v.string()),
     documentId: v.optional(v.id("documents")),
     submittedAt: v.number(),
+
+    // CG/SPA Form 3 — Agreed Performance Targets & Achievements
+    targets: v.optional(v.array(v.object({
+      target: v.string(),
+      achievement: v.string(),
+    }))),
+    additionalAssignments: v.optional(v.array(v.string())),
+
+    // CG/SPA Form 5 — Individual Work Plan
+    workPlanPeriod: v.optional(v.string()),
+    workPlan: v.optional(v.array(v.object({
+      directorateObjective: v.string(),
+      individualTargets: v.string(),
+      keyActivities: v.string(),
+      resourcesRequired: v.string(),
+      performanceIndicators: v.string(),
+      timeFrame: v.string(),
+    }))),
+
+    // CG/SPA Form 4 — per-officer line feeding the Recommendation to CEC
+    mpmcRecommendation: v.optional(v.string()),
+    mpmcRemarks: v.optional(v.string()),
   }).index("by_employee", ["employeeId"]),
 
   trainingRecords: defineTable({
@@ -212,12 +241,21 @@ export default defineSchema({
     restrictedNotes: v.optional(v.string()),
   }).index("by_employee", ["employeeId"]),
 
+  // Exit types follow the legal grounds for leaving Kenyan county public
+  // service: mandatory age retirement, resignation, ill health, abolition
+  // of office, retirement in the public interest, contract expiry,
+  // disciplinary dismissal, and death in service.
   exitRecords: defineTable({
     employeeId: v.id("employees"),
     exitType: v.union(
-      v.literal("retirement"),
+      v.literal("retirement_age"),
       v.literal("resignation"),
-      v.literal("termination")
+      v.literal("ill_health"),
+      v.literal("abolition_of_office"),
+      v.literal("public_interest"),
+      v.literal("contract_expiry"),
+      v.literal("dismissal"),
+      v.literal("death")
     ),
     stage: v.union(
       v.literal("notice_filed"),
@@ -264,12 +302,4 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
-  // Blank reference templates (e.g. the CG/SPA appraisal forms) shown on the
-  // Performance page — not tied to any one employee, unlike `documents`.
-  performanceTemplates: defineTable({
-    title: v.string(),
-    storageId: v.id("_storage"),
-    uploadedBy: v.optional(v.id("users")),
-    uploadedAt: v.number(),
-  }),
 });

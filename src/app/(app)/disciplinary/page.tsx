@@ -54,6 +54,7 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [confirmOpenCase, setConfirmOpenCase] = useState(false);
 
   const employeeFor = (id: string) => employees.find((e) => e._id === id);
   const employeeName = (id: string) => employeeFor(id)?.fullName ?? "Unknown";
@@ -69,11 +70,18 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
     setActionError("");
   };
 
-  const handleSubmit = async () => {
+  const requestSubmit = () => {
     if (!selectedEmployee) {
       setActionError("Select an employee");
       return;
     }
+    setActionError("");
+    setConfirmOpenCase(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedEmployee) return;
+    setConfirmOpenCase(false);
     setSubmitting(true);
     try {
       await openCase({
@@ -170,7 +178,7 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
           <>
             <button onClick={() => { setIsDrawerOpen(false); resetForm(); }} className="px-4 h-9 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
             <button
-              onClick={handleSubmit}
+              onClick={requestSubmit}
               disabled={submitting}
               className="px-4 h-9 text-[12px] font-bold bg-red-700 text-white hover:bg-red-800 rounded-lg transition-colors shadow-sm disabled:opacity-60"
             >
@@ -185,6 +193,11 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
         <div>
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Employee</label>
           <EmployeePicker value={selectedEmployee} onChange={setSelectedEmployee} />
+          {selectedEmployee && (
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Selected: <span className="font-bold text-slate-700">{selectedEmployee.fullName}</span> · P/F {selectedEmployee.pfNumber}
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Starting Stage</label>
@@ -228,6 +241,19 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
           />
         )}
       </SlideOver>
+
+      <ConfirmDialog
+        open={confirmOpenCase}
+        title="Confirm employee"
+        message={
+          selectedEmployee
+            ? `Open a confidential disciplinary case for ${selectedEmployee.fullName} (P/F ${selectedEmployee.pfNumber})? Double-check this is the correct employee before continuing.`
+            : ""
+        }
+        confirmLabel="Yes, this is the correct employee"
+        onConfirm={handleSubmit}
+        onCancel={() => setConfirmOpenCase(false)}
+      />
     </div>
   );
 }
@@ -383,13 +409,14 @@ function CasePortalBody({
               <button
                 key={stageValue}
                 onClick={() => handleStageClick(stageValue)}
-                disabled={changingStage}
-                className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors text-left disabled:opacity-50 ${
+                disabled={changingStage || isPast}
+                title={isPast ? "Disciplinary stages cannot move backward" : undefined}
+                className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors text-left disabled:cursor-not-allowed ${
                   isActive
                     ? "bg-red-700 text-white"
                     : isPast
-                    ? "bg-red-50 text-red-700 hover:bg-red-100"
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    ? "bg-red-50 text-red-700 opacity-60"
+                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
                 }`}
               >
                 {isPast || isActive ? <CheckCircle2 size={14} className="shrink-0" /> : <span className="w-3.5 h-3.5 rounded-full border-2 border-current shrink-0" />}
@@ -398,9 +425,14 @@ function CasePortalBody({
             );
           })}
         </div>
+        <p className="text-[10px] text-slate-400 mt-1.5">Cases move forward only — a completed stage cannot be reopened.</p>
 
         {interdictionFormStage && (
           <div className="mt-2 border border-red-100 bg-red-50/50 rounded-lg p-3 space-y-3">
+            <p className="text-[11px] text-red-800 bg-red-100 border border-red-200 rounded p-2">
+              Confirm: <span className="font-bold">{employee?.fullName ?? "this employee"}</span>
+              {employee?.pfNumber ? ` (P/F ${employee.pfNumber})` : ""} is the officer being interdicted/suspended.
+            </p>
             <div>
               <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                 Interdiction or Suspension?
@@ -426,7 +458,7 @@ function CasePortalBody({
                 disabled={changingStage}
                 className="flex-1 h-8 text-[11px] font-bold bg-red-700 hover:opacity-90 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                {changingStage ? "Saving..." : "Confirm"}
+                {changingStage ? "Saving..." : `Confirm — it's ${employee?.fullName ?? "this employee"}`}
               </button>
             </div>
           </div>
@@ -434,6 +466,10 @@ function CasePortalBody({
 
         {outcomeFormStage && (
           <div className="mt-2 border border-purple-100 bg-purple-50/50 rounded-lg p-3 space-y-3">
+            <p className="text-[11px] text-purple-800 bg-purple-100 border border-purple-200 rounded p-2">
+              Confirm: recording this outcome for <span className="font-bold">{employee?.fullName ?? "this employee"}</span>
+              {employee?.pfNumber ? ` (P/F ${employee.pfNumber})` : ""}.
+            </p>
             <div>
               <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                 Board Outcome {outcomeFormStage === "closed" ? "(optional)" : ""}
@@ -502,7 +538,7 @@ function CasePortalBody({
       <ConfirmDialog
         open={!!pendingStage}
         title={`Move to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"?`}
-        message={`Are you sure you want to move this case to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"? This updates the confidential disciplinary record.`}
+        message={`Confirm: move ${employee?.fullName ?? "this employee"}'s case (${record.caseReference}) to "${pendingStage ? STAGE_LABELS[pendingStage] : ""}"? This updates the confidential disciplinary record.`}
         confirmLabel="Yes, move stage"
         onConfirm={confirmStage}
         onCancel={() => setPendingStage(null)}
