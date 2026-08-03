@@ -90,17 +90,18 @@ function DocumentSlot({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const overallState = docs.length === 0 ? "missing" : docs.every((d) => d.status === "verified") ? "verified" : "uploaded";
   const isSingleUpload = SINGLE_UPLOAD_CATEGORIES.includes(docKey);
+  const uploadBlocked = isSingleUpload && docs.length > 0;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadError("");
     try {
-      // Single-upload categories hold exactly one document — the backend
-      // swaps the old one out automatically on finalizeUpload.
       const uploadUrl = await generateUploadUrl();
       const result = await fetch(uploadUrl, {
         method: "POST",
@@ -115,8 +116,8 @@ function DocumentSlot({
         storageId,
         originalFilename: file.name,
       });
-    } catch (err) {
-      console.error("Upload failed", err);
+    } catch (err: any) {
+      setUploadError(err?.data ?? err?.message ?? "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -146,21 +147,16 @@ function DocumentSlot({
         </div>
       )}
 
-      {canUpload && (
+      {uploadError && <p className="mb-2 text-[10px] text-rust-700">{uploadError}</p>}
+
+      {canUpload && !uploadBlocked && (
         <div className="mt-auto pt-1 flex gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className="flex-1 py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
           >
-            <Upload size={13} />{" "}
-            {uploading
-              ? "Uploading..."
-              : docs.length === 0
-              ? "Upload"
-              : isSingleUpload
-              ? "Replace"
-              : "Add Another"}
+            <Upload size={13} /> {uploading ? "Uploading..." : "Upload"}
           </button>
           <button
             onClick={() => cameraInputRef.current?.click()}
@@ -174,8 +170,10 @@ function DocumentSlot({
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         </div>
       )}
-      {isSingleUpload && docs.length > 0 && (
-        <p className="mt-1 text-[10px] text-text-secondary italic">Single document only — uploading replaces the current file.</p>
+      {uploadBlocked && (
+        <p className="mt-auto pt-1 text-[10px] text-text-secondary italic">
+          Single document only — delete the existing file above to upload a replacement.
+        </p>
       )}
     </div>
   );
@@ -244,6 +242,10 @@ function EditModal({
 
   const setValue = (key: EditableKey, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
   const isContractOrCasual = values.termsOfService === "Contract" || values.termsOfService === "Casual";
+  const currentlyMinorAtHire =
+    !!values.dateOfBirth &&
+    !!values.firstAppointmentDate &&
+    calculateAgeAt(values.dateOfBirth, values.firstAppointmentDate) < 18;
 
   const pfTaken = useFieldAvailability("pfNumber", values.pfNumber, employee._id);
   const nationalIdTaken = useFieldAvailability("nationalId", values.nationalId, employee._id);
@@ -350,6 +352,9 @@ function EditModal({
               <div>
                 <label className={labelClass}>Date of Birth</label>
                 <input type="date" max={todayISO()} value={values.dateOfBirth} onChange={(e) => setValue("dateOfBirth", e.target.value)} className={inputClass} />
+                {currentlyMinorAtHire && (
+                  <p className="text-amber-600 text-[10px] mt-1">Under 18 at appointment — correct this or the date of appointment to save.</p>
+                )}
               </div>
               <div>
                 <label className={labelClass}>Gender</label>
@@ -674,6 +679,31 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
         </div>
       )}
 
+      {wasMinorAtHire && (
+        <div className="bg-amber-500/5 border border-amber-500/30 rounded p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+              <AlertCircle size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-700">Hired Under 18 — Pre-Policy Record</p>
+              <p className="text-[12px] text-text-secondary mt-0.5">
+                This employee's Date of Birth and Date of Appointment show them as under 18 at hire, predating the
+                minimum-age policy. Please verify the dates and correct the record if either was entered wrong.
+              </p>
+            </div>
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => setEditOpen(true)}
+              className="h-8 px-3 text-[12px] font-bold bg-amber-600 text-white hover:bg-amber-700 rounded transition-colors shadow-sm shrink-0"
+            >
+              Edit Profile to Correct
+            </button>
+          )}
+        </div>
+      )}
+
       <div className={isFrozen ? "opacity-60 grayscale pointer-events-none space-y-6" : "space-y-6"}>
 
       {/* Header Band */}
@@ -722,14 +752,6 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
               {employee.isBlacklisted && (
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rust-700 text-white uppercase tracking-wider align-middle">
                   Blacklisted
-                </span>
-              )}
-              {wasMinorAtHire && (
-                <span
-                  title="Was under 18 on their date of appointment — predates the minimum-age policy"
-                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500 text-white uppercase tracking-wider align-middle"
-                >
-                  Hired Under 18 (Pre-Policy)
                 </span>
               )}
             </h1>

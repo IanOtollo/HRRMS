@@ -6,7 +6,7 @@ import { ConvexError } from "convex/values";
 // Keep in sync with src/lib/documentCategories.ts — these categories hold
 // one canonical document per employee, regardless of which screen the
 // upload comes from (employee record or the digitization queue).
-const SINGLE_UPLOAD_CATEGORIES = ["02_Birth_Certificate", "05_National_ID", "07_KRA_PIN"];
+const SINGLE_UPLOAD_CATEGORIES = ["02_Birth_Certificate", "05_National_ID", "07_KRA_PIN", "06_Confirmation_PandP"];
 
 export const generateUploadUrl = mutation({
   handler: async (ctx) => {
@@ -45,10 +45,11 @@ export const finalizeUpload = mutation({
         .query("documents")
         .withIndex("by_employee", (q) => q.eq("employeeId", args.employeeId))
         .filter((q) => q.eq(q.field("category"), args.category))
-        .collect();
-      for (const doc of existing) {
-        if (doc.storageId) await ctx.storage.delete(doc.storageId);
-        await ctx.db.delete(doc._id);
+        .first();
+      if (existing) {
+        throw new ConvexError(
+          "This employee already has a document on file for this category. Delete the existing one first to upload a replacement."
+        );
       }
     }
 

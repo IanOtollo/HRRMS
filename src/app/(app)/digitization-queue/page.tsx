@@ -90,7 +90,7 @@ export default function DigitizationPage() {
     selectedEmployee ? { employeeId: selectedEmployee._id } : "skip"
   ) || [];
   const isSingleUploadCategory = SINGLE_UPLOAD_CATEGORIES.includes(categoryKey);
-  const willReplaceExisting = isSingleUploadCategory && selectedEmployeeDocs.some((d) => d.category === categoryKey);
+  const alreadyOnFile = isSingleUploadCategory && selectedEmployeeDocs.some((d) => d.category === categoryKey);
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
   const canDelete =
@@ -130,6 +130,10 @@ export default function DigitizationPage() {
   const handleUpload = async () => {
     if (!selectedEmployee || !file) {
       setActionError("Select an employee and a file to upload");
+      return;
+    }
+    if (alreadyOnFile) {
+      setActionError("This employee already has this document on file — delete it first to upload a replacement.");
       return;
     }
     setUploading(true);
@@ -328,9 +332,9 @@ export default function DigitizationPage() {
                     options={ALL_DOCUMENT_CATEGORIES.map((c) => ({ value: c.key, label: c.name }))}
                   />
                   {isSingleUploadCategory && (
-                    <p className="text-[11px] text-slate-500 mt-1.5">
-                      {willReplaceExisting
-                        ? "This employee already has this document on file — uploading will replace it."
+                    <p className={`text-[11px] mt-1.5 ${alreadyOnFile ? "text-rust-700 font-bold" : "text-slate-500"}`}>
+                      {alreadyOnFile
+                        ? "This employee already has this document on file — delete it from their record first before uploading again."
                         : "Single document only — one upload per employee for this category."}
                     </p>
                   )}
@@ -340,7 +344,7 @@ export default function DigitizationPage() {
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-4 h-8 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded transition-colors">Cancel</button>
                 <button
                   onClick={handleUpload}
-                  disabled={uploading}
+                  disabled={uploading || alreadyOnFile}
                   className="px-4 h-8 text-[12px] font-bold bg-[#202b5d] text-white hover:bg-[#161f47] rounded transition-colors shadow-sm disabled:opacity-60"
                 >
                   {uploading ? "Uploading..." : "Upload & Save"}
