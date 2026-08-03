@@ -45,7 +45,7 @@ const employeeSchema = z.object({
   jobGroup: z.string().optional(),
   payrollNumber: z.string().min(1, "Required"),
   firstAppointmentDate: z.string().min(1, "Required")
-    .refine((val) => val >= todayISO(), "Date of appointment cannot be in the past"),
+    .refine((val) => val <= todayISO(), "Date of appointment cannot be in the future"),
   termsOfService: z.string().min(1, "Required"),
   stationLocation: z.string().min(1, "Required"),
   contractEndDate: z.string().optional(),
@@ -452,7 +452,7 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Date of Appointment</label>
-                <input type="date" min={todayISO()} {...register("firstAppointmentDate")} className={inputClass} />
+                <input type="date" max={todayISO()} {...register("firstAppointmentDate")} className={inputClass} />
                 {errors.firstAppointmentDate && <p className={errorClass}>{errors.firstAppointmentDate.message}</p>}
               </div>
 
