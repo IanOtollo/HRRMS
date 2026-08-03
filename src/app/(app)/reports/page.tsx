@@ -1,6 +1,7 @@
 "use client";
 
 import { FileBarChart, Download, ShieldOff, FileCheck2, CalendarClock, Building2, PieChart as PieChartIcon, Users2 } from "lucide-react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useQuery } from "convex/react";
 import {
@@ -214,6 +215,8 @@ export default function ReportsPage() {
                     <th className="py-1.5">Employee</th>
                     <th className="py-1.5">Department</th>
                     <th className="py-1.5">Date</th>
+                    <th className="py-1.5">In</th>
+                    <th className="py-1.5"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-paper-50">
@@ -222,6 +225,16 @@ export default function ReportsPage() {
                       <td className="py-2 font-bold text-[#202b5d]">{r.name}</td>
                       <td className="py-2 text-slate-600 truncate max-w-[160px]">{r.department}</td>
                       <td className="py-2 text-slate-600">{r.retirementDate}</td>
+                      <td className="py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.daysLeft <= 15 ? "bg-rust-700/10 text-rust-700" : "bg-amber-100 text-amber-700"}`}>
+                          {r.daysLeft}d
+                        </span>
+                      </td>
+                      <td className="py-2 text-right">
+                        <Link href={`/employees/${r.employeeId}`} className="text-blue-600 hover:underline font-bold">
+                          View
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -58,10 +58,19 @@ export const get = query({
 export const initiateCycle = mutation({
   args: {
     cycleLabel: v.string(),
+    financialYear: v.string(),
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+
+    const alreadyRun = await ctx.db
+      .query("appraisals")
+      .filter((q) => q.eq(q.field("financialYear"), args.financialYear))
+      .first();
+    if (alreadyRun) {
+      throw new ConvexError(`An appraisal cycle for FY ${args.financialYear} has already been initiated — only one cycle is allowed per financial year`);
+    }
 
     let employees;
     if (args.departmentId) {
@@ -87,6 +96,7 @@ export const initiateCycle = mutation({
         await ctx.db.insert("appraisals", {
           employeeId: emp._id,
           cycleLabel: args.cycleLabel,
+          financialYear: args.financialYear,
           status: "pending",
           submittedAt: Date.now(),
         });
@@ -100,7 +110,7 @@ export const initiateCycle = mutation({
       action: "appraisal.initiateCycle",
       recordType: "appraisals",
       timestamp: Date.now(),
-      details: { cycleLabel: args.cycleLabel, created },
+      details: { cycleLabel: args.cycleLabel, financialYear: args.financialYear, created },
     });
 
     return { created };

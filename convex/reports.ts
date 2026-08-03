@@ -35,11 +35,14 @@ export const dashboardStats = query({
         const retirementMs = new Date(e.retirementDate).getTime();
         return retirementMs - now > 0 && retirementMs - now <= sixtyDaysMs;
       })
+      .sort((a, b) => new Date(a.retirementDate).getTime() - new Date(b.retirementDate).getTime())
       .map((e) => ({
+        employeeId: e._id,
         name: e.fullName,
         pfNumber: e.pfNumber,
         department: departmentNameById.get(e.departmentId) ?? "—",
         retirementDate: e.retirementDate,
+        daysLeft: Math.ceil((new Date(e.retirementDate).getTime() - now) / (24 * 60 * 60 * 1000)),
       }));
 
     const totalDocs = documents.length;

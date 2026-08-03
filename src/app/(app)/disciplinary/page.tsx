@@ -498,6 +498,12 @@ function CasePortalBody({
                 options={Object.entries(OUTCOME_LABELS).map(([value, label]) => ({ value, label }))}
               />
             </div>
+            {outcomeFormStage === "closed" && (outcomeChoice === "dismissal" || outcomeChoice === "retirement_public_interest") && (
+              <p className="text-[11px] text-red-800 bg-red-100 border border-red-200 rounded p-2">
+                Closing with this outcome will end {employee?.fullName ?? "the employee"}'s service — their master record
+                will be frozen (greyed out and read-only), the same as the exit pipeline.
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setOutcomeFormStage(null)}

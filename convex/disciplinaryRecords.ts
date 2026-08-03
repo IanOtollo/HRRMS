@@ -156,12 +156,32 @@ export const advanceStage = mutation({
       throw new ConvexError("Specify whether this is an Interdiction or a Suspension");
     }
 
+    const effectiveOutcome = args.outcome ?? record.outcome;
+
     await ctx.db.patch(args.id, {
       stage: args.stage,
       interdictionType: args.interdictionType ?? record.interdictionType,
-      outcome: args.outcome ?? record.outcome,
+      outcome: effectiveOutcome,
       closedAt: args.stage === "closed" ? Date.now() : record.closedAt,
     });
+
+    // A case closed with Dismissal or Retirement in the Public Interest
+    // ends the employee's service — freeze their master record the same
+    // way the exit pipeline does, so it can't be edited going forward.
+    if (args.stage === "closed") {
+      const newStatus =
+        effectiveOutcome === "dismissal"
+          ? "terminated"
+          : effectiveOutcome === "retirement_public_interest"
+          ? "retired"
+          : null;
+      if (newStatus) {
+        await ctx.db.patch(record.employeeId, {
+          employmentStatus: newStatus,
+          updatedAt: Date.now(),
+        });
+      }
+    }
 
     await ctx.db.insert("auditLog", {
       userId: user._id,

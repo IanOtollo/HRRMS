@@ -22,6 +22,20 @@ const statusStyles: Record<string, string> = {
   completed: "bg-green-100 text-green-700",
 };
 
+// Kenyan county FY runs 1 July – 30 June.
+function currentFinancialYear(): string {
+  const now = new Date();
+  const year = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${year}/${year + 1}`;
+}
+
+function financialYearOptions(): string[] {
+  const [startYear] = currentFinancialYear().split("/").map(Number);
+  const years: string[] = [];
+  for (let y = startYear - 1; y <= startYear + 2; y++) years.push(`${y}/${y + 1}`);
+  return years;
+}
+
 export default function PerformancePage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const appraisals = useQuery(api.appraisals.listByCycle, {}) || [];
@@ -29,7 +43,8 @@ export default function PerformancePage() {
   const departments = useQuery(api.departments.list) || [];
   const initiateCycle = useMutation(api.appraisals.initiateCycle);
 
-  const [cycleLabel, setCycleLabel] = useState("");
+  const [financialYear, setFinancialYear] = useState(currentFinancialYear());
+  const [cycleLabel, setCycleLabel] = useState(`FY ${currentFinancialYear()} Annual Appraisal`);
   const [departmentId, setDepartmentId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -42,7 +57,8 @@ export default function PerformancePage() {
   const pendingCount = appraisals.length - completedCount - submittedCount;
 
   const resetForm = () => {
-    setCycleLabel("");
+    setFinancialYear(currentFinancialYear());
+    setCycleLabel(`FY ${currentFinancialYear()} Annual Appraisal`);
     setDepartmentId("");
     setActionError("");
   };
@@ -56,6 +72,7 @@ export default function PerformancePage() {
     try {
       await initiateCycle({
         cycleLabel,
+        financialYear,
         departmentId: departmentId ? (departmentId as Id<"departments">) : undefined,
       });
       setIsDrawerOpen(false);
@@ -166,6 +183,18 @@ export default function PerformancePage() {
         {actionError && (
           <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{actionError}</div>
         )}
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Financial Year</label>
+          <Select
+            value={financialYear}
+            onChange={(v) => {
+              setFinancialYear(v);
+              setCycleLabel(`FY ${v} Annual Appraisal`);
+            }}
+            options={financialYearOptions().map((fy) => ({ value: fy, label: `FY ${fy}` }))}
+          />
+          <p className="text-[11px] text-slate-400 mt-1">Only one cycle can be initiated per financial year.</p>
+        </div>
         <div>
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Cycle Name</label>
           <input

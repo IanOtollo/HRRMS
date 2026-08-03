@@ -158,6 +158,9 @@ export default defineSchema({
   appraisals: defineTable({
     employeeId: v.id("employees"),
     cycleLabel: v.string(),
+    // e.g. "2026/2027" — Kenyan county FY runs 1 July to 30 June. Only one
+    // cycle may be initiated per financial year.
+    financialYear: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("submitted"),
