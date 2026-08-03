@@ -87,7 +87,7 @@ export default function DashboardPage() {
           </div>
 
           {pendingDocs.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider font-bold text-slate-500">
@@ -97,7 +97,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="text-[13px]">
-                  {pendingDocs.slice(0, 6).map((doc, i) => (
+                  {pendingDocs.map((doc, i) => (
                     <motion.tr
                       key={doc._id}
                       initial={{ opacity: 0 }}
