@@ -10,6 +10,7 @@ import { api } from "../../../../../convex/_generated/api";
 import { Id, Doc } from "../../../../../convex/_generated/dataModel";
 import { DOCUMENT_CLUSTERS } from "@/lib/documentCategories";
 import Select from "@/components/Select";
+import PhoneInput from "@/components/PhoneInput";
 
 function DocumentFileRow({
   doc,
@@ -298,7 +299,7 @@ function EditModal({
               </div>
               <div>
                 <label className={labelClass}>Phone Number</label>
-                <input value={values.phoneNumber} onChange={(e) => setValue("phoneNumber", e.target.value)} className={inputClass} />
+                <PhoneInput value={values.phoneNumber} onChange={(v) => setValue("phoneNumber", v)} />
               </div>
               <div className="md:col-span-2">
                 <label className={labelClass}>Email Address</label>

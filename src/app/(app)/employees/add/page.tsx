@@ -11,6 +11,7 @@ import { ConvexError } from "convex/values";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import Select from "@/components/Select";
+import PhoneInput from "@/components/PhoneInput";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -36,7 +37,7 @@ const employeeSchema = z.object({
     .refine((val) => val <= todayISO(), "Date of birth cannot be in the future")
     .refine((val) => calculateAge(val) >= 18, "Employee must be at least 18 years old"),
   gender: z.enum(["Male", "Female"], { errorMap: () => ({ message: "Required" }) }),
-  phoneNumber: z.string().min(10, "Required"),
+  phoneNumber: z.string().regex(/^\+254\d{9}$/, "Enter a valid phone number"),
   emailAddress: z.string().email("Invalid email"),
 
   // Step 2: Career
@@ -160,10 +161,10 @@ export default function AddEmployeePage() {
       return;
     }
     const shortPhoneEntry = nextOfKinList.find(
-      (e) => e.phoneNumber && e.phoneNumber.length !== 10
+      (e) => e.phoneNumber && !/^\+254\d{9}$/.test(e.phoneNumber)
     );
     if (shortPhoneEntry) {
-      setNextOfKinError("Next of kin phone number must be exactly 10 digits");
+      setNextOfKinError("Next of kin phone number must be a valid +254 number");
       setCurrentStep(4);
       return;
     }
@@ -379,7 +380,13 @@ export default function AddEmployeePage() {
 
               <div className="relative">
                 <label className={labelClass}>Phone Number</label>
-                <input {...register("phoneNumber")} className={inputClass} />
+                <Controller
+                  name="phoneNumber"
+                  control={control}
+                  render={({ field }) => (
+                    <PhoneInput value={field.value ?? ""} onChange={field.onChange} />
+                  )}
+                />
                 {errors.phoneNumber && <p className={errorClass}>{errors.phoneNumber.message}</p>}
               </div>
 
@@ -570,13 +577,9 @@ export default function AddEmployeePage() {
                   </div>
                   <div className="relative">
                     <label className={labelClass}>Phone Number</label>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
+                    <PhoneInput
                       value={entry.phoneNumber}
-                      onChange={(e) => updateNextOfKin(index, "phoneNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      className={inputClass}
+                      onChange={(value) => updateNextOfKin(index, "phoneNumber", value)}
                     />
                   </div>
                 </div>
