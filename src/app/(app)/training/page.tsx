@@ -11,6 +11,8 @@ import EmployeePicker from "@/components/EmployeePicker";
 import PageHeader from "@/components/PageHeader";
 import SlideOver from "@/components/SlideOver";
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export default function TrainingPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<Id<"trainingRecords"> | null>(null);
@@ -49,6 +51,15 @@ export default function TrainingPage() {
       setActionError("Fill in employee, course title, and dates");
       return;
     }
+    if (startDate < todayISO()) {
+      setActionError("Start date cannot be in the past");
+      return;
+    }
+    if (endDate < startDate) {
+      setActionError("End date cannot be before the start date");
+      return;
+    }
+    setActionError("");
     setSubmitting(true);
     try {
       await logTraining({
@@ -190,11 +201,26 @@ export default function TrainingPage() {
         <div className="flex space-x-4">
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Start Date</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" />
+            <input
+              type="date"
+              min={todayISO()}
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (endDate && endDate < e.target.value) setEndDate(e.target.value);
+              }}
+              className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none"
+            />
           </div>
           <div className="flex-1">
             <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">End Date</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none" />
+            <input
+              type="date"
+              min={startDate || todayISO()}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg h-9 px-3 text-[13px] focus:ring-1 focus:ring-[#202b5d] focus:outline-none"
+            />
           </div>
         </div>
       </SlideOver>

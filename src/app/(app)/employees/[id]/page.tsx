@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, use, Suspense } from "react";
-import { ChevronLeft, Edit2, Printer, FileText, CheckCircle2, AlertCircle, X, Upload, Eye, ShieldCheck, Camera, PhoneCall, User2 } from "lucide-react";
+import { ChevronLeft, Edit2, Printer, FileText, CheckCircle2, AlertCircle, X, Upload, Eye, ShieldCheck, Camera, PhoneCall, User2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,12 +15,20 @@ import PhoneInput from "@/components/PhoneInput";
 function DocumentFileRow({
   doc,
   canVerify,
+  canDelete,
 }: {
   doc: Doc<"documents">;
   canVerify: boolean;
+  canDelete: boolean;
 }) {
   const verifyDoc = useMutation(api.documents.verify);
+  const removeDoc = useMutation(api.documents.remove);
   const fileUrl = useQuery(api.documents.getUrl, doc.storageId ? { storageId: doc.storageId } : "skip");
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete "${doc.originalFilename}"? This cannot be undone.`)) return;
+    removeDoc({ documentId: doc._id });
+  };
 
   return (
     <div className="flex items-center gap-2 border border-paper-100 rounded bg-white px-2.5 py-2">
@@ -44,6 +52,15 @@ function DocumentFileRow({
           className="w-7 h-7 flex items-center justify-center text-white bg-county-green hover:bg-county-green-dark rounded transition-colors shrink-0"
         >
           <ShieldCheck size={13} />
+        </button>
+      )}
+      {canDelete && (
+        <button
+          onClick={handleDelete}
+          title="Delete"
+          className="w-7 h-7 flex items-center justify-center text-rust-700 bg-white hover:bg-rust-700/10 border border-rust-700/20 rounded transition-colors shrink-0"
+        >
+          <Trash2 size={13} />
         </button>
       )}
     </div>
@@ -129,7 +146,7 @@ function DocumentSlot({
       {docs.length > 0 && (
         <div className="space-y-1.5 mb-3">
           {docs.map((doc) => (
-            <DocumentFileRow key={doc._id} doc={doc} canVerify={canVerify} />
+            <DocumentFileRow key={doc._id} doc={doc} canVerify={canVerify} canDelete={canUpload} />
           ))}
         </div>
       )}
@@ -490,6 +507,7 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
   const allDocuments = useQuery(api.documents.listByEmployee, { employeeId }) || [];
   const generatePhotoUploadUrl = useMutation(api.documents.generateUploadUrl);
   const updateEmployeeField = useMutation(api.employees.updateField);
+  const removePhotoMutation = useMutation(api.employees.removePhoto);
   const renewContract = useMutation(api.employees.renewContract);
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -522,6 +540,12 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
       setPhotoUploading(false);
       if (photoInputRef.current) photoInputRef.current.value = "";
     }
+  };
+
+  const handleRemovePhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm("Remove this employee's profile photo?")) return;
+    removePhotoMutation({ id: employeeId });
   };
 
   const activeCluster = DOCUMENT_CLUSTERS.find((c) => c.id === activeTab)!;
@@ -641,6 +665,15 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[11px] font-bold">
                 Uploading...
               </div>
+            )}
+            {canEdit && photoUrl && !photoUploading && (
+              <button
+                onClick={handleRemovePhoto}
+                title="Remove photo"
+                className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center text-white bg-rust-700/80 hover:bg-rust-700 rounded transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 size={12} />
+              </button>
             )}
             {canEdit && (
               <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />

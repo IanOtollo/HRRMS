@@ -259,6 +259,33 @@ export const updateField = mutation({
   },
 });
 
+export const removePhoto = mutation({
+  args: { id: v.id("employees") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    const employee = await ctx.db.get(args.id);
+    if (!employee) throw new ConvexError("Employee not found");
+
+    if (employee.passportPhotoId) {
+      await ctx.storage.delete(employee.passportPhotoId);
+    }
+
+    await ctx.db.patch(args.id, {
+      passportPhotoId: undefined,
+      updatedAt: Date.now(),
+    });
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "employee.removePhoto",
+      recordType: "employees",
+      recordId: args.id,
+      timestamp: Date.now(),
+    });
+  },
+});
+
 // Renews a Casual/Contract employee's contract, reactivating their record if
 // it had gone dormant on the previous contract's expiry. Permanent &
 // Pensionable retirement is final and does not go through this path.

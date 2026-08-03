@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef } from "react";
-import { FileDigit, Folder, ChevronDown, Plus, X, UploadCloud, CheckCircle2, Camera } from "lucide-react";
+import { FileDigit, Folder, ChevronDown, Plus, X, UploadCloud, CheckCircle2, Camera, Eye, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -10,13 +10,72 @@ import EmployeePicker from "@/components/EmployeePicker";
 import { ALL_DOCUMENT_CATEGORIES, categoryName } from "@/lib/documentCategories";
 import Select from "@/components/Select";
 
+function PendingDocRow({
+  doc,
+  canVerify,
+  canDelete,
+}: {
+  doc: Doc<"documents">;
+  canVerify: boolean;
+  canDelete: boolean;
+}) {
+  const verifyDoc = useMutation(api.documents.verify);
+  const removeDoc = useMutation(api.documents.remove);
+  const fileUrl = useQuery(api.documents.getUrl, doc.storageId ? { storageId: doc.storageId } : "skip");
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete "${doc.originalFilename}"? This cannot be undone.`)) return;
+    removeDoc({ documentId: doc._id });
+  };
+
+  return (
+    <tr className="hover:bg-slate-50 transition-colors">
+      <td className="px-4 py-2.5 text-[12px] text-slate-600">{categoryName(doc.category)}</td>
+      <td className="px-4 py-2.5 text-[12px] text-slate-600 truncate max-w-[200px]">{doc.originalFilename}</td>
+      <td className="px-4 py-2.5 text-[12px] text-slate-600">{new Date(doc.uploadedAt).toLocaleDateString()}</td>
+      {(canVerify || canDelete) && (
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            {fileUrl && (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View"
+                className="h-7 px-2.5 flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-bold transition-colors"
+              >
+                <Eye size={12} /> View
+              </a>
+            )}
+            {canVerify && (
+              <button
+                onClick={() => verifyDoc({ documentId: doc._id })}
+                className="h-7 px-2.5 flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 rounded text-[11px] font-bold transition-colors"
+              >
+                <CheckCircle2 size={12} /> Verify
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                className="h-7 px-2.5 flex items-center gap-1 bg-rust-700/10 hover:bg-rust-700/20 text-rust-700 rounded text-[11px] font-bold transition-colors"
+              >
+                <Trash2 size={12} /> Delete
+              </button>
+            )}
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+}
+
 export default function DigitizationPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const pendingDocs = useQuery(api.documents.listPending) || [];
   const currentUser = useQuery(api.users.me);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const finalizeUpload = useMutation(api.documents.finalizeUpload);
-  const verifyDoc = useMutation(api.documents.verify);
 
   const [selectedEmployee, setSelectedEmployee] = useState<Doc<"employees"> | null>(null);
   const [categoryKey, setCategoryKey] = useState(ALL_DOCUMENT_CATEGORIES[0].key);
@@ -27,6 +86,8 @@ export default function DigitizationPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
+  const canDelete =
+    currentUser?.role === "super_admin" || currentUser?.role === "hr_director" || currentUser?.role === "records_officer";
 
   const employeeFolders = useMemo(() => {
     const byEmployee = new Map<string, { employeeId: string; employeeName: string; docs: typeof pendingDocs }>();
@@ -160,26 +221,14 @@ export default function DigitizationPage() {
                               <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Category</th>
                               <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Filename</th>
                               <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Uploaded</th>
-                              {canVerify && <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Actions</th>}
+                              {(canVerify || canDelete) && (
+                                <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Actions</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-paper-100">
                             {folder.docs.map((doc) => (
-                              <tr key={doc._id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-4 py-2.5 text-[12px] text-slate-600">{categoryName(doc.category)}</td>
-                                <td className="px-4 py-2.5 text-[12px] text-slate-600 truncate max-w-[200px]">{doc.originalFilename}</td>
-                                <td className="px-4 py-2.5 text-[12px] text-slate-600">{new Date(doc.uploadedAt).toLocaleDateString()}</td>
-                                {canVerify && (
-                                  <td className="px-4 py-2.5">
-                                    <button
-                                      onClick={() => verifyDoc({ documentId: doc._id })}
-                                      className="h-7 px-2.5 flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 rounded text-[11px] font-bold transition-colors"
-                                    >
-                                      <CheckCircle2 size={12} /> Verify
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
+                              <PendingDocRow key={doc._id} doc={doc} canVerify={canVerify} canDelete={canDelete} />
                             ))}
                           </tbody>
                         </table>
