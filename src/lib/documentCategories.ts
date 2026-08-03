@@ -72,6 +72,10 @@ export const ALL_DOCUMENT_CATEGORIES = DOCUMENT_CLUSTERS.flatMap((cluster) =>
   cluster.docs.map((doc) => ({ ...doc, clusterId: cluster.id }))
 );
 
+// These categories hold one canonical document per employee — once a file
+// is on record, the upload controls are hidden rather than allowing more.
+export const SINGLE_UPLOAD_CATEGORIES = ["02_Birth_Certificate", "05_National_ID", "07_KRA_PIN"];
+
 export function categoryName(key: string): string {
   return ALL_DOCUMENT_CATEGORIES.find((d) => d.key === key)?.name ?? key;
 }

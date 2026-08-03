@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { FileDigit, Plus, X, UploadCloud, CheckCircle2, Camera } from "lucide-react";
+import { useMemo, useState, useRef } from "react";
+import { FileDigit, Folder, ChevronDown, Plus, X, UploadCloud, CheckCircle2, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -27,6 +27,30 @@ export default function DigitizationPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
+
+  const employeeFolders = useMemo(() => {
+    const byEmployee = new Map<string, { employeeId: string; employeeName: string; docs: typeof pendingDocs }>();
+    for (const doc of pendingDocs) {
+      const key = doc.employeeId as unknown as string;
+      const folder = byEmployee.get(key);
+      if (folder) {
+        folder.docs.push(doc);
+      } else {
+        byEmployee.set(key, { employeeId: key, employeeName: doc.employeeName, docs: [doc] });
+      }
+    }
+    return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  }, [pendingDocs]);
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleFolder = (employeeId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(employeeId)) next.delete(employeeId);
+      else next.add(employeeId);
+      return next;
+    });
+  };
 
   const resetForm = () => {
     setSelectedEmployee(null);
@@ -83,59 +107,91 @@ export default function DigitizationPage() {
         </button>
       </div>
 
-      <div className="bg-white border border-paper-200 shadow-sm rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-paper-200">
-                <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Employee</th>
-                <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Category</th>
-                <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Filename</th>
-                <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Uploaded</th>
-                {canVerify && <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-paper-100">
-              {pendingDocs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center">
-                      <FileDigit size={32} className="text-slate-300 mb-3" />
-                      <span className="text-[14px] font-bold text-slate-600">No documents awaiting verification</span>
-                      <span className="text-[12px] mt-1 max-w-sm">Use Upload Document to add scans from the physical registry.</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                pendingDocs.map((doc, i) => (
-                  <motion.tr
-                    key={doc._id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.02 }}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-4 py-2.5 text-[13px] font-bold text-[#202b5d]">{doc.employeeName}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{categoryName(doc.category)}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600 truncate max-w-[200px]">{doc.originalFilename}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{new Date(doc.uploadedAt).toLocaleDateString()}</td>
-                    {canVerify && (
-                      <td className="px-4 py-2.5">
-                        <button
-                          onClick={() => verifyDoc({ documentId: doc._id })}
-                          className="h-7 px-2.5 flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 rounded text-[11px] font-bold transition-colors"
-                        >
-                          <CheckCircle2 size={12} /> Verify
-                        </button>
-                      </td>
-                    )}
-                  </motion.tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {employeeFolders.length === 0 ? (
+        <div className="bg-white border border-paper-200 shadow-sm rounded-xl px-4 py-12 text-center text-slate-400">
+          <div className="flex flex-col items-center justify-center">
+            <FileDigit size={32} className="text-slate-300 mb-3" />
+            <span className="text-[14px] font-bold text-slate-600">No documents awaiting verification</span>
+            <span className="text-[12px] mt-1 max-w-sm">Use Upload Document to add scans from the physical registry.</span>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {employeeFolders.map((folder, i) => {
+            const isOpen = expandedIds.has(folder.employeeId);
+            return (
+              <motion.div
+                key={folder.employeeId}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.02 }}
+                className="bg-white border border-paper-200 shadow-sm rounded-xl overflow-hidden"
+              >
+                <button
+                  onClick={() => toggleFolder(folder.employeeId)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Folder size={16} className="text-[#202b5d] shrink-0" />
+                    <span className="text-[13px] font-bold text-[#202b5d] truncate">{folder.employeeName}</span>
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">
+                      {folder.docs.length} {folder.docs.length === 1 ? "document" : "documents"}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    className={`text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden border-t border-paper-100"
+                    >
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-paper-200">
+                              <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Category</th>
+                              <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Filename</th>
+                              <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Uploaded</th>
+                              {canVerify && <th className="px-4 py-2 text-[10px] uppercase tracking-wider font-bold text-slate-500">Actions</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-paper-100">
+                            {folder.docs.map((doc) => (
+                              <tr key={doc._id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-2.5 text-[12px] text-slate-600">{categoryName(doc.category)}</td>
+                                <td className="px-4 py-2.5 text-[12px] text-slate-600 truncate max-w-[200px]">{doc.originalFilename}</td>
+                                <td className="px-4 py-2.5 text-[12px] text-slate-600">{new Date(doc.uploadedAt).toLocaleDateString()}</td>
+                                {canVerify && (
+                                  <td className="px-4 py-2.5">
+                                    <button
+                                      onClick={() => verifyDoc({ documentId: doc._id })}
+                                      className="h-7 px-2.5 flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 rounded text-[11px] font-bold transition-colors"
+                                    >
+                                      <CheckCircle2 size={12} /> Verify
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       <AnimatePresence>
         {isModalOpen && (

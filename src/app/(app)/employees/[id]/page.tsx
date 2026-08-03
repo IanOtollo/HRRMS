@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id, Doc } from "../../../../../convex/_generated/dataModel";
-import { DOCUMENT_CLUSTERS } from "@/lib/documentCategories";
+import { DOCUMENT_CLUSTERS, SINGLE_UPLOAD_CATEGORIES } from "@/lib/documentCategories";
 import Select from "@/components/Select";
 import PhoneInput from "@/components/PhoneInput";
 
@@ -69,17 +69,26 @@ function DocumentSlot({
   const docs = documents.filter((d) => d.category === docKey);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const finalizeUpload = useMutation(api.documents.finalizeUpload);
+  const removeDocument = useMutation(api.documents.remove);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const overallState = docs.length === 0 ? "missing" : docs.every((d) => d.status === "verified") ? "verified" : "uploaded";
+  const isSingleUpload = SINGLE_UPLOAD_CATEGORIES.includes(docKey);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
+      // Single-upload categories hold exactly one document — swap the old
+      // one out rather than accumulating extra files.
+      if (isSingleUpload) {
+        for (const existing of docs) {
+          await removeDocument({ documentId: existing._id });
+        }
+      }
       const uploadUrl = await generateUploadUrl();
       const result = await fetch(uploadUrl, {
         method: "POST",
@@ -132,7 +141,14 @@ function DocumentSlot({
             disabled={uploading}
             className="flex-1 py-1.5 text-xs font-semibold text-county-blue bg-white hover:bg-paper-50 border border-county-blue/30 rounded transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
           >
-            <Upload size={13} /> {uploading ? "Uploading..." : docs.length > 0 ? "Add Another" : "Upload"}
+            <Upload size={13} />{" "}
+            {uploading
+              ? "Uploading..."
+              : docs.length === 0
+              ? "Upload"
+              : isSingleUpload
+              ? "Replace"
+              : "Add Another"}
           </button>
           <button
             onClick={() => cameraInputRef.current?.click()}
@@ -145,6 +161,9 @@ function DocumentSlot({
           <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelect} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         </div>
+      )}
+      {isSingleUpload && docs.length > 0 && (
+        <p className="mt-1 text-[10px] text-text-secondary italic">Single document only — uploading replaces the current file.</p>
       )}
     </div>
   );

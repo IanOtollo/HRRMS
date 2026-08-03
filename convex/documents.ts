@@ -85,6 +85,31 @@ export const verify = mutation({
   },
 });
 
+export const remove = mutation({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new ConvexError("Document not found");
+
+    if (doc.storageId) {
+      await ctx.storage.delete(doc.storageId);
+    }
+    await ctx.db.delete(args.documentId);
+
+    await ctx.db.insert("auditLog", {
+      userId: user._id,
+      userName: user.name ?? "Unknown",
+      action: "document.remove",
+      recordType: "documents",
+      recordId: args.documentId,
+      timestamp: Date.now(),
+      details: { category: doc.category, filename: doc.originalFilename },
+    });
+  },
+});
+
 export const updateStatus = mutation({
   args: { documentId: v.id("documents"), status: v.union(v.literal("not_uploaded"), v.literal("uploaded"), v.literal("verified")) },
   handler: async (ctx, args) => {
