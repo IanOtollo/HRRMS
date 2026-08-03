@@ -65,6 +65,45 @@ export const list = query({
 
 import { ConvexError } from "convex/values";
 
+const UNIQUE_FIELD_INDEX = {
+  pfNumber: "by_pf",
+  nationalId: "by_national_id",
+  phoneNumber: "by_phone",
+  emailAddress: "by_email",
+} as const;
+
+// Real-time "is this already taken" check for the four unique fields, used
+// to flag a clash the moment it's typed rather than only on submit.
+export const checkFieldAvailable = query({
+  args: {
+    field: v.union(
+      v.literal("pfNumber"),
+      v.literal("nationalId"),
+      v.literal("phoneNumber"),
+      v.literal("emailAddress")
+    ),
+    value: v.string(),
+    excludeId: v.optional(v.id("employees")),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    const value = args.value.trim();
+    if (!value) return { available: true };
+
+    const index = UNIQUE_FIELD_INDEX[args.field];
+    const existing = await ctx.db
+      .query("employees")
+      .withIndex(index, (q) => q.eq(args.field as never, value))
+      .unique();
+
+    if (!existing || existing._id === args.excludeId) {
+      return { available: true };
+    }
+    return { available: false };
+  },
+});
+
 export const get = query({
   args: { id: v.id("employees") },
   handler: async (ctx, args) => {

@@ -12,6 +12,7 @@ import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import Select from "@/components/Select";
 import PhoneInput from "@/components/PhoneInput";
+import { useFieldAvailability } from "@/hooks/useFieldAvailability";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -137,6 +138,13 @@ export default function AddEmployeePage() {
   const termsOfService = watch("termsOfService");
   const isContractOrCasual = termsOfService === "Contract" || termsOfService === "Casual";
 
+  const pfTaken = useFieldAvailability("pfNumber", watch("pfNumber") ?? "");
+  const nationalIdTaken = useFieldAvailability("nationalId", watch("nationalId") ?? "");
+  const phoneTaken = useFieldAvailability("phoneNumber", watch("phoneNumber") ?? "");
+  const emailTaken = useFieldAvailability("emailAddress", watch("emailAddress") ?? "");
+
+  const hasDuplicateField = pfTaken || nationalIdTaken || phoneTaken || emailTaken;
+
   const processNextStep = async () => {
     let fieldsToValidate: any[] = [];
     if (currentStep === 1) fieldsToValidate = ['firstName', 'surname', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
@@ -144,12 +152,18 @@ export default function AddEmployeePage() {
     if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'bankName', 'branchName'];
 
     const isStepValid = await trigger(fieldsToValidate as any);
+    if (currentStep === 1 && hasDuplicateField) return;
     if (isStepValid) {
       setCurrentStep((prev) => prev + 1);
     }
   };
 
   const onSubmit = async (data: EmployeeFormValues) => {
+    if (hasDuplicateField) {
+      setSubmitError("One of the fields on Step 1 (P/F Number, National ID, Phone, or Email) is already in use by another employee.");
+      setCurrentStep(1);
+      return;
+    }
     // Next of kin is optional overall, but a row the user started filling in
     // must be completed (or removed) before submitting.
     const partialEntry = nextOfKinList.find(
@@ -343,13 +357,21 @@ export default function AddEmployeePage() {
               <div className="relative">
                 <label className={labelClass}>P/F Number</label>
                 <input {...register("pfNumber")} className={inputClass} />
-                {errors.pfNumber && <p className={errorClass}>{errors.pfNumber.message}</p>}
+                {errors.pfNumber ? (
+                  <p className={errorClass}>{errors.pfNumber.message}</p>
+                ) : pfTaken ? (
+                  <p className={errorClass}>P/F Number already in use</p>
+                ) : null}
               </div>
 
               <div className="relative">
                 <label className={labelClass}>National ID</label>
                 <input {...register("nationalId")} className={inputClass} />
-                {errors.nationalId && <p className={errorClass}>{errors.nationalId.message}</p>}
+                {errors.nationalId ? (
+                  <p className={errorClass}>{errors.nationalId.message}</p>
+                ) : nationalIdTaken ? (
+                  <p className={errorClass}>National ID already in use</p>
+                ) : null}
               </div>
 
               <div className="relative">
@@ -387,13 +409,21 @@ export default function AddEmployeePage() {
                     <PhoneInput value={field.value ?? ""} onChange={field.onChange} />
                   )}
                 />
-                {errors.phoneNumber && <p className={errorClass}>{errors.phoneNumber.message}</p>}
+                {errors.phoneNumber ? (
+                  <p className={errorClass}>{errors.phoneNumber.message}</p>
+                ) : phoneTaken ? (
+                  <p className={errorClass}>Phone number already in use</p>
+                ) : null}
               </div>
 
               <div className="col-span-1 md:col-span-2 relative">
                 <label className={labelClass}>Work Email Address</label>
                 <input type="email" {...register("emailAddress")} className={inputClass} />
-                {errors.emailAddress && <p className={errorClass}>{errors.emailAddress.message}</p>}
+                {errors.emailAddress ? (
+                  <p className={errorClass}>{errors.emailAddress.message}</p>
+                ) : emailTaken ? (
+                  <p className={errorClass}>Email address already in use</p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -604,7 +634,8 @@ export default function AddEmployeePage() {
             <button
               type="button"
               onClick={processNextStep}
-              className="px-4 py-1.5 text-[13px] bg-[#202b5d] hover:bg-[#161f47] text-white font-bold rounded flex items-center transition-colors shadow-sm"
+              disabled={currentStep === 1 && hasDuplicateField}
+              className="px-4 py-1.5 text-[13px] bg-[#202b5d] hover:bg-[#161f47] text-white font-bold rounded flex items-center transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Continue <ChevronRight size={14} className="ml-1" />
             </button>

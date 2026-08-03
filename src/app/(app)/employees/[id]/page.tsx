@@ -11,6 +11,7 @@ import { Id, Doc } from "../../../../../convex/_generated/dataModel";
 import { DOCUMENT_CLUSTERS, SINGLE_UPLOAD_CATEGORIES } from "@/lib/documentCategories";
 import Select from "@/components/Select";
 import PhoneInput from "@/components/PhoneInput";
+import { useFieldAvailability } from "@/hooks/useFieldAvailability";
 
 function DocumentFileRow({
   doc,
@@ -239,7 +240,17 @@ function EditModal({
   const setValue = (key: EditableKey, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
   const isContractOrCasual = values.termsOfService === "Contract" || values.termsOfService === "Casual";
 
+  const pfTaken = useFieldAvailability("pfNumber", values.pfNumber, employee._id);
+  const nationalIdTaken = useFieldAvailability("nationalId", values.nationalId, employee._id);
+  const phoneTaken = useFieldAvailability("phoneNumber", values.phoneNumber, employee._id);
+  const emailTaken = useFieldAvailability("emailAddress", values.emailAddress, employee._id);
+  const hasDuplicateField = pfTaken || nationalIdTaken || phoneTaken || emailTaken;
+
   const handleSave = async () => {
+    if (hasDuplicateField) {
+      setError("One of P/F Number, National ID, Phone, or Email is already in use by another employee.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -312,10 +323,12 @@ function EditModal({
               <div>
                 <label className={labelClass}>P/F Number</label>
                 <input value={values.pfNumber} onChange={(e) => setValue("pfNumber", e.target.value)} className={inputClass} />
+                {pfTaken && <p className="text-red-600 text-[10px] mt-1">P/F Number already in use</p>}
               </div>
               <div>
                 <label className={labelClass}>National ID</label>
                 <input value={values.nationalId} onChange={(e) => setValue("nationalId", e.target.value)} className={inputClass} />
+                {nationalIdTaken && <p className="text-red-600 text-[10px] mt-1">National ID already in use</p>}
               </div>
               <div>
                 <label className={labelClass}>Date of Birth</label>
@@ -336,10 +349,12 @@ function EditModal({
               <div>
                 <label className={labelClass}>Phone Number</label>
                 <PhoneInput value={values.phoneNumber} onChange={(v) => setValue("phoneNumber", v)} />
+                {phoneTaken && <p className="text-red-600 text-[10px] mt-1">Phone number already in use</p>}
               </div>
               <div className="md:col-span-2">
                 <label className={labelClass}>Email Address</label>
                 <input type="email" value={values.emailAddress} onChange={(e) => setValue("emailAddress", e.target.value)} className={inputClass} />
+                {emailTaken && <p className="text-red-600 text-[10px] mt-1">Email address already in use</p>}
               </div>
             </div>
           </div>
@@ -424,7 +439,7 @@ function EditModal({
           <button onClick={onClose} className="px-4 h-8 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded transition-colors">Cancel</button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || hasDuplicateField}
             className="px-4 h-8 text-[12px] font-bold bg-[#202b5d] text-white hover:bg-[#161f47] rounded transition-colors shadow-sm disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save Changes"}
