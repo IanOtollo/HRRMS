@@ -87,7 +87,6 @@ function DocumentSlot({
   const docs = documents.filter((d) => d.category === docKey);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const finalizeUpload = useMutation(api.documents.finalizeUpload);
-  const removeDocument = useMutation(api.documents.remove);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -100,13 +99,8 @@ function DocumentSlot({
     if (!file) return;
     setUploading(true);
     try {
-      // Single-upload categories hold exactly one document — swap the old
-      // one out rather than accumulating extra files.
-      if (isSingleUpload) {
-        for (const existing of docs) {
-          await removeDocument({ documentId: existing._id });
-        }
-      }
+      // Single-upload categories hold exactly one document — the backend
+      // swaps the old one out automatically on finalizeUpload.
       const uploadUrl = await generateUploadUrl();
       const result = await fetch(uploadUrl, {
         method: "POST",

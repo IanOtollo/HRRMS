@@ -7,7 +7,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc } from "../../../../convex/_generated/dataModel";
 import EmployeePicker from "@/components/EmployeePicker";
-import { ALL_DOCUMENT_CATEGORIES, categoryName } from "@/lib/documentCategories";
+import { ALL_DOCUMENT_CATEGORIES, categoryName, SINGLE_UPLOAD_CATEGORIES } from "@/lib/documentCategories";
 import Select from "@/components/Select";
 
 function PendingDocRow({
@@ -84,6 +84,13 @@ export default function DigitizationPage() {
   const [actionError, setActionError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedEmployeeDocs = useQuery(
+    api.documents.listByEmployee,
+    selectedEmployee ? { employeeId: selectedEmployee._id } : "skip"
+  ) || [];
+  const isSingleUploadCategory = SINGLE_UPLOAD_CATEGORIES.includes(categoryKey);
+  const willReplaceExisting = isSingleUploadCategory && selectedEmployeeDocs.some((d) => d.category === categoryKey);
 
   const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
   const canDelete =
@@ -320,6 +327,13 @@ export default function DigitizationPage() {
                     onChange={setCategoryKey}
                     options={ALL_DOCUMENT_CATEGORIES.map((c) => ({ value: c.key, label: c.name }))}
                   />
+                  {isSingleUploadCategory && (
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      {willReplaceExisting
+                        ? "This employee already has this document on file — uploading will replace it."
+                        : "Single document only — one upload per employee for this category."}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">

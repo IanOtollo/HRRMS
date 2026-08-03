@@ -3,6 +3,11 @@ import { v } from "convex/values";
 import { requireRole } from "./lib/rbac";
 import { ConvexError } from "convex/values";
 
+// Keep in sync with src/lib/documentCategories.ts — these categories hold
+// one canonical document per employee, regardless of which screen the
+// upload comes from (employee record or the digitization queue).
+const SINGLE_UPLOAD_CATEGORIES = ["02_Birth_Certificate", "05_National_ID", "07_KRA_PIN"];
+
 export const generateUploadUrl = mutation({
   handler: async (ctx) => {
     await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
@@ -34,6 +39,18 @@ export const finalizeUpload = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+
+    if (SINGLE_UPLOAD_CATEGORIES.includes(args.category)) {
+      const existing = await ctx.db
+        .query("documents")
+        .withIndex("by_employee", (q) => q.eq("employeeId", args.employeeId))
+        .filter((q) => q.eq(q.field("category"), args.category))
+        .collect();
+      for (const doc of existing) {
+        if (doc.storageId) await ctx.storage.delete(doc.storageId);
+        await ctx.db.delete(doc._id);
+      }
+    }
 
     const id = await ctx.db.insert("documents", {
       employeeId: args.employeeId,
