@@ -179,16 +179,33 @@ export default defineSchema({
     discardReason: v.optional(v.string()),
   }).index("by_employee", ["employeeId"]),
 
+  // Follows the County Public Service Board disciplinary procedure: receipt
+  // & preliminary inquiry, investigation, show cause/hearing, interdiction
+  // or suspension, and board determination — guided throughout by natural
+  // justice and fair administrative action.
   disciplinaryRecords: defineTable({
     employeeId: v.id("employees"),
     caseReference: v.string(),
     stage: v.union(
-      v.literal("warning"),
+      v.literal("preliminary_inquiry"),
+      v.literal("investigation"),
       v.literal("show_cause"),
-      v.literal("interdiction"),
-      v.literal("committee_decision"),
+      v.literal("interdiction_suspension"),
+      v.literal("board_determination"),
       v.literal("closed")
     ),
+    // Which of the two applies during the interdiction_suspension stage —
+    // interdiction (half pay, pending investigation) vs suspension (no pay,
+    // pending dismissal of a convicted/culpable officer).
+    interdictionType: v.optional(v.union(v.literal("interdiction"), v.literal("suspension"))),
+    // The Board's determination — set on reaching board_determination or closed.
+    outcome: v.optional(v.union(
+      v.literal("no_further_action"),
+      v.literal("reprimand"),
+      v.literal("salary_stoppage"),
+      v.literal("dismissal"),
+      v.literal("retirement_public_interest")
+    )),
     openedAt: v.number(),
     closedAt: v.optional(v.number()),
     documentIds: v.array(v.id("documents")),
@@ -245,5 +262,14 @@ export default defineSchema({
     allowedIpRanges: v.optional(v.string()),
     updatedBy: v.optional(v.id("users")),
     updatedAt: v.number(),
+  }),
+
+  // Blank reference templates (e.g. the CG/SPA appraisal forms) shown on the
+  // Performance page — not tied to any one employee, unlike `documents`.
+  performanceTemplates: defineTable({
+    title: v.string(),
+    storageId: v.id("_storage"),
+    uploadedBy: v.optional(v.id("users")),
+    uploadedAt: v.number(),
   }),
 });

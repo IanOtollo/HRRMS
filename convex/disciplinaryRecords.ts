@@ -26,11 +26,22 @@ export const list = query({
 });
 
 const stageValidator = v.union(
-  v.literal("warning"),
+  v.literal("preliminary_inquiry"),
+  v.literal("investigation"),
   v.literal("show_cause"),
-  v.literal("interdiction"),
-  v.literal("committee_decision"),
+  v.literal("interdiction_suspension"),
+  v.literal("board_determination"),
   v.literal("closed")
+);
+
+const interdictionTypeValidator = v.union(v.literal("interdiction"), v.literal("suspension"));
+
+const outcomeValidator = v.union(
+  v.literal("no_further_action"),
+  v.literal("reprimand"),
+  v.literal("salary_stoppage"),
+  v.literal("dismissal"),
+  v.literal("retirement_public_interest")
 );
 
 export const openCase = mutation({
@@ -102,6 +113,8 @@ export const advanceStage = mutation({
   args: {
     id: v.id("disciplinaryRecords"),
     stage: stageValidator,
+    interdictionType: v.optional(interdictionTypeValidator),
+    outcome: v.optional(outcomeValidator),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
@@ -109,8 +122,14 @@ export const advanceStage = mutation({
     const record = await ctx.db.get(args.id);
     if (!record) throw new ConvexError("Disciplinary record not found");
 
+    if (args.stage === "interdiction_suspension" && !args.interdictionType) {
+      throw new ConvexError("Specify whether this is an Interdiction or a Suspension");
+    }
+
     await ctx.db.patch(args.id, {
       stage: args.stage,
+      interdictionType: args.interdictionType ?? record.interdictionType,
+      outcome: args.outcome ?? record.outcome,
       closedAt: args.stage === "closed" ? Date.now() : record.closedAt,
     });
 
@@ -121,7 +140,7 @@ export const advanceStage = mutation({
       recordType: "disciplinaryRecords",
       recordId: args.id,
       timestamp: Date.now(),
-      details: { stage: args.stage },
+      details: { stage: args.stage, interdictionType: args.interdictionType, outcome: args.outcome },
     });
   },
 });

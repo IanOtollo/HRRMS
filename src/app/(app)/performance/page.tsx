@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { LineChart, Plus, Calendar, Save, ExternalLink, ClipboardCheck, Star } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { LineChart, Plus, Calendar, Save, ExternalLink, ClipboardCheck, Star, FileText, Eye, Trash2, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
@@ -89,6 +89,8 @@ export default function PerformancePage() {
           </button>
         }
       />
+
+      <ReferenceFormsSection />
 
       <div className="bg-white border border-paper-200 shadow-sm rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -201,6 +203,106 @@ export default function PerformancePage() {
           />
         )}
       </SlideOver>
+    </div>
+  );
+}
+
+function ReferenceFormsSection() {
+  const currentUser = useQuery(api.users.me);
+  const templates = useQuery(api.performanceTemplates.list) || [];
+  const generateUploadUrl = useMutation(api.performanceTemplates.generateUploadUrl);
+  const createTemplate = useMutation(api.performanceTemplates.create);
+  const removeTemplate = useMutation(api.performanceTemplates.remove);
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const canManage =
+    currentUser?.role === "super_admin" || currentUser?.role === "hr_director" || currentUser?.role === "records_officer";
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError("");
+    setUploading(true);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+      await createTemplate({ title: file.name.replace(/\.[^.]+$/, ""), storageId });
+    } catch (err: any) {
+      setUploadError(err?.data?.message ?? err?.message ?? "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDelete = (id: Id<"performanceTemplates">, title: string) => {
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    removeTemplate({ id });
+  };
+
+  if (templates.length === 0 && !canManage) return null;
+
+  return (
+    <div className="bg-white border border-paper-200 shadow-sm rounded-xl p-4 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-[13px] font-bold text-[#202b5d]">Reference Forms</p>
+          <p className="text-[11px] text-slate-500">CG/SPA appraisal form templates for the current cycle</p>
+        </div>
+        {canManage && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="h-8 px-3 text-[11px] font-bold border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 disabled:opacity-60"
+          >
+            <UploadCloud size={13} /> {uploading ? "Uploading..." : "Upload Form"}
+          </button>
+        )}
+        <input ref={fileInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFileSelect} />
+      </div>
+
+      {uploadError && <p className="text-[11px] text-red-700 mb-2">{uploadError}</p>}
+
+      {templates.length === 0 ? (
+        <p className="text-[12px] text-slate-400">No reference forms uploaded yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {templates.map((t) => (
+            <div key={t._id} className="flex items-center gap-2 border border-paper-100 rounded-lg px-3 py-2 bg-paper-50/30">
+              <FileText size={14} className="text-slate-400 shrink-0" />
+              <span className="text-[12px] font-medium text-text-primary truncate flex-1 min-w-0">{t.title}</span>
+              {t.url && (
+                <a
+                  href={t.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View"
+                  className="w-7 h-7 flex items-center justify-center text-text-secondary bg-white hover:bg-paper-100 border border-paper-200 rounded transition-colors shrink-0"
+                >
+                  <Eye size={12} />
+                </a>
+              )}
+              {canManage && (
+                <button
+                  onClick={() => handleDelete(t._id, t.title)}
+                  title="Delete"
+                  className="w-7 h-7 flex items-center justify-center text-rust-700 bg-white hover:bg-rust-700/10 border border-rust-700/20 rounded transition-colors shrink-0"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -14,22 +14,45 @@ import Select from "@/components/Select";
 import SlideOver from "@/components/SlideOver";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
+// Mirrors the County Public Service Board disciplinary procedure.
 const STAGE_LABELS: Record<string, string> = {
-  warning: "Warning Letter",
-  show_cause: "Show Cause Letter",
-  interdiction: "Interdiction / Suspension",
-  committee_decision: "Committee Decision",
+  preliminary_inquiry: "Preliminary Inquiry",
+  investigation: "Investigation",
+  show_cause: "Show Cause & Hearing",
+  interdiction_suspension: "Interdiction / Suspension",
+  board_determination: "Board Determination",
   closed: "Closed",
 };
 
-const STAGE_ORDER = ["warning", "show_cause", "interdiction", "committee_decision", "closed"];
+const STAGE_ORDER = [
+  "preliminary_inquiry",
+  "investigation",
+  "show_cause",
+  "interdiction_suspension",
+  "board_determination",
+  "closed",
+];
 
 const stageStyles: Record<string, string> = {
-  warning: "bg-amber-100 text-amber-700",
+  preliminary_inquiry: "bg-amber-100 text-amber-700",
+  investigation: "bg-sky-100 text-sky-700",
   show_cause: "bg-orange-100 text-orange-700",
-  interdiction: "bg-red-100 text-red-700",
-  committee_decision: "bg-purple-100 text-purple-700",
+  interdiction_suspension: "bg-red-100 text-red-700",
+  board_determination: "bg-purple-100 text-purple-700",
   closed: "bg-slate-100 text-slate-600",
+};
+
+const INTERDICTION_TYPE_LABELS: Record<string, string> = {
+  interdiction: "Interdiction (half pay, pending investigation)",
+  suspension: "Suspension (no pay, pending dismissal)",
+};
+
+const OUTCOME_LABELS: Record<string, string> = {
+  no_further_action: "No Further Action",
+  reprimand: "Reprimand",
+  salary_stoppage: "Salary Stoppage",
+  dismissal: "Dismissal",
+  retirement_public_interest: "Retirement in the Public Interest",
 };
 
 export default function DisciplinaryPage() {
@@ -61,7 +84,7 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
   const openCase = useMutation(api.disciplinaryRecords.openCase);
 
   const [selectedEmployee, setSelectedEmployee] = useState<Doc<"employees"> | null>(null);
-  const [stage, setStage] = useState("warning");
+  const [stage, setStage] = useState("preliminary_inquiry");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -75,7 +98,7 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
 
   const resetForm = () => {
     setSelectedEmployee(null);
-    setStage("warning");
+    setStage("preliminary_inquiry");
     setNotes("");
     setActionError("");
   };
@@ -198,14 +221,15 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
           <EmployeePicker value={selectedEmployee} onChange={setSelectedEmployee} />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Incident Stage</label>
+          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Starting Stage</label>
           <Select
             value={stage}
             onChange={setStage}
             options={[
-              { value: "warning", label: "Warning Letter" },
-              { value: "show_cause", label: "Show Cause Letter" },
-              { value: "interdiction", label: "Interdiction / Suspension" },
+              { value: "preliminary_inquiry", label: "Preliminary Inquiry" },
+              { value: "investigation", label: "Investigation" },
+              { value: "show_cause", label: "Show Cause & Hearing" },
+              { value: "interdiction_suspension", label: "Interdiction / Suspension" },
             ]}
           />
         </div>
@@ -262,13 +286,39 @@ function CasePortalBody({
   const [changingStage, setChangingStage] = useState(false);
   const [pendingStage, setPendingStage] = useState<string | null>(null);
 
+  // These two stages need extra detail captured alongside the stage change,
+  // so they use an inline form instead of the plain ConfirmDialog.
+  const [interdictionFormStage, setInterdictionFormStage] = useState<string | null>(null);
+  const [interdictionTypeChoice, setInterdictionTypeChoice] = useState<string>(record.interdictionType ?? "interdiction");
+  const [outcomeFormStage, setOutcomeFormStage] = useState<string | null>(null);
+  const [outcomeChoice, setOutcomeChoice] = useState(record.outcome ?? "");
+
   useEffect(() => {
     setNotes(record.restrictedNotes ?? "");
     setNotesSaved(false);
-  }, [record._id, record.restrictedNotes]);
+    setInterdictionFormStage(null);
+    setInterdictionTypeChoice(record.interdictionType ?? "interdiction");
+    setOutcomeFormStage(null);
+    setOutcomeChoice(record.outcome ?? "");
+  }, [record._id, record.restrictedNotes, record.interdictionType, record.outcome]);
 
   const canEditNotes = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
   const currentStageIndex = STAGE_ORDER.indexOf(record.stage);
+
+  const handleStageClick = (stageValue: string) => {
+    if (stageValue === record.stage) return;
+    if (stageValue === "interdiction_suspension") {
+      setInterdictionFormStage(stageValue);
+      setOutcomeFormStage(null);
+      return;
+    }
+    if (stageValue === "board_determination" || stageValue === "closed") {
+      setOutcomeFormStage(stageValue);
+      setInterdictionFormStage(null);
+      return;
+    }
+    setPendingStage(stageValue);
+  };
 
   const confirmStage = async () => {
     if (!pendingStage) return;
@@ -278,6 +328,36 @@ function CasePortalBody({
     } finally {
       setChangingStage(false);
       setPendingStage(null);
+    }
+  };
+
+  const confirmInterdiction = async () => {
+    if (!interdictionFormStage) return;
+    setChangingStage(true);
+    try {
+      await advanceStage({
+        id: record._id,
+        stage: interdictionFormStage as any,
+        interdictionType: interdictionTypeChoice as any,
+      });
+      setInterdictionFormStage(null);
+    } finally {
+      setChangingStage(false);
+    }
+  };
+
+  const confirmOutcome = async () => {
+    if (!outcomeFormStage) return;
+    setChangingStage(true);
+    try {
+      await advanceStage({
+        id: record._id,
+        stage: outcomeFormStage as any,
+        outcome: outcomeChoice ? (outcomeChoice as any) : undefined,
+      });
+      setOutcomeFormStage(null);
+    } finally {
+      setChangingStage(false);
     }
   };
 
@@ -312,6 +392,18 @@ function CasePortalBody({
           <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold mb-0.5">Closed</p>
           <p className="font-medium text-text-primary">{record.closedAt ? new Date(record.closedAt).toLocaleDateString() : "—"}</p>
         </div>
+        {record.interdictionType && (
+          <div className="col-span-2">
+            <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold mb-0.5">Interdiction / Suspension</p>
+            <p className="font-medium text-text-primary">{INTERDICTION_TYPE_LABELS[record.interdictionType]}</p>
+          </div>
+        )}
+        {record.outcome && (
+          <div className="col-span-2">
+            <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold mb-0.5">Board Outcome</p>
+            <p className="font-medium text-text-primary">{OUTCOME_LABELS[record.outcome]}</p>
+          </div>
+        )}
       </div>
 
       {/* Stage pipeline */}
@@ -324,7 +416,7 @@ function CasePortalBody({
             return (
               <button
                 key={stageValue}
-                onClick={() => stageValue !== record.stage && setPendingStage(stageValue)}
+                onClick={() => handleStageClick(stageValue)}
                 disabled={changingStage}
                 className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors text-left disabled:opacity-50 ${
                   isActive
@@ -340,6 +432,70 @@ function CasePortalBody({
             );
           })}
         </div>
+
+        {interdictionFormStage && (
+          <div className="mt-2 border border-red-100 bg-red-50/50 rounded-lg p-3 space-y-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                Interdiction or Suspension?
+              </label>
+              <Select
+                value={interdictionTypeChoice}
+                onChange={setInterdictionTypeChoice}
+                options={[
+                  { value: "interdiction", label: INTERDICTION_TYPE_LABELS.interdiction },
+                  { value: "suspension", label: INTERDICTION_TYPE_LABELS.suspension },
+                ]}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setInterdictionFormStage(null)}
+                className="flex-1 h-8 text-[11px] font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmInterdiction}
+                disabled={changingStage}
+                className="flex-1 h-8 text-[11px] font-bold bg-red-700 hover:opacity-90 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {changingStage ? "Saving..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {outcomeFormStage && (
+          <div className="mt-2 border border-purple-100 bg-purple-50/50 rounded-lg p-3 space-y-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                Board Outcome {outcomeFormStage === "closed" ? "(optional)" : ""}
+              </label>
+              <Select
+                value={outcomeChoice}
+                onChange={setOutcomeChoice}
+                placeholder="No outcome recorded"
+                options={Object.entries(OUTCOME_LABELS).map(([value, label]) => ({ value, label }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOutcomeFormStage(null)}
+                className="flex-1 h-8 text-[11px] font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmOutcome}
+                disabled={changingStage}
+                className="flex-1 h-8 text-[11px] font-bold bg-purple-700 hover:opacity-90 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {changingStage ? "Saving..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Confidential notes */}
