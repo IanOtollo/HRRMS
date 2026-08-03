@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, FileDigit, UploadCloud, Scale, FolderOpen, Activity, CheckCircle2, ArrowUpRight } from "lucide-react";
+import { Users, FileDigit, UploadCloud, Scale, FolderOpen, CheckCircle2, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
@@ -13,10 +13,6 @@ export default function DashboardPage() {
   const employees = useQuery(api.employees.list, {}) || [];
   const departments = useQuery(api.departments.list) || [];
   const pendingDocs = useQuery(api.documents.listPending) || [];
-  const recentActivity = useQuery(
-    api.auditLog.list,
-    currentUser?.role === "super_admin" || currentUser?.role === "hr_director" ? { limit: 8 } : "skip"
-  ) || [];
   const disciplinaryRecords = useQuery(
     api.disciplinaryRecords.list,
     currentUser?.role && currentUser.role !== "department_viewer" ? {} : "skip"
@@ -74,51 +70,13 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.5, ease }}
-          className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[320px]"
-        >
-          <h2 className="text-[14px] uppercase tracking-wider font-bold text-slate-600 mb-4">Recent Activity</h2>
-          {recentActivity.length > 0 ? (
-            <div className="space-y-4">
-              {recentActivity.map((activity, i) => (
-                <motion.div
-                  key={activity._id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: i * 0.03 }}
-                  className="flex gap-3"
-                >
-                  <div className="w-2 h-2 mt-1.5 rounded-full bg-[#202b5d] shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-medium text-slate-700">
-                      <span className="font-bold">{activity.userName}</span> — {activity.action.replace(/\./g, " ")}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{new Date(activity.timestamp).toLocaleString()}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-[200px] text-slate-400">
-              <Activity size={24} className="mb-2 opacity-20" />
-              <p className="text-[13px] font-bold text-slate-600">No recent activity</p>
-              <p className="text-[11px] text-center max-w-[200px] mt-1">Activity logs will appear here once users interact with the system.</p>
-            </div>
-          )}
-        </motion.div>
-
+      <div className="grid grid-cols-1 gap-6">
         {/* Documents Awaiting Verification */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.5, ease, delay: 0.1 }}
+          transition={{ duration: 0.5, ease }}
           className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[320px] flex flex-col"
         >
           <div className="flex items-center justify-between mb-4">
