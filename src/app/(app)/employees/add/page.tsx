@@ -159,6 +159,14 @@ export default function AddEmployeePage() {
       setCurrentStep(4);
       return;
     }
+    const shortPhoneEntry = nextOfKinList.find(
+      (e) => e.phoneNumber && e.phoneNumber.length !== 10
+    );
+    if (shortPhoneEntry) {
+      setNextOfKinError("Next of kin phone number must be exactly 10 digits");
+      setCurrentStep(4);
+      return;
+    }
     setNextOfKinError("");
     setSubmitError("");
 
@@ -563,8 +571,11 @@ export default function AddEmployeePage() {
                   <div className="relative">
                     <label className={labelClass}>Phone Number</label>
                     <input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       value={entry.phoneNumber}
-                      onChange={(e) => updateNextOfKin(index, "phoneNumber", e.target.value)}
+                      onChange={(e) => updateNextOfKin(index, "phoneNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
                       className={inputClass}
                     />
                   </div>
