@@ -174,6 +174,76 @@ export const setActive = mutation({
   },
 });
 
+// Called by the client right after a successful sign-in — records the
+// login in the audit log and stamps lastLoginAt.
+export const recordLoginSuccess = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return;
+    const user = await ctx.db.get(userId);
+    if (!user) return;
+
+    await ctx.db.patch(userId, { lastLoginAt: Date.now() });
+
+    await ctx.db.insert("auditLog", {
+      userId,
+      userName: user.name ?? user.email ?? "Unknown",
+      action: "user.login",
+      recordType: "users",
+      recordId: userId,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+// Called by the client when sign-in throws — there is no authenticated
+// identity at this point, so this must not require auth. Resolves the
+// attempted email against the users table when possible so the log still
+// names who was targeted, without ever revealing whether the account exists
+// back to the caller.
+export const recordLoginFailure = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = args.email.trim();
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .first();
+
+    await ctx.db.insert("auditLog", {
+      userId: existing?._id,
+      userName: existing?.name ?? email,
+      action: "user.loginFailed",
+      recordType: "users",
+      recordId: existing?._id,
+      timestamp: Date.now(),
+      details: { email },
+    });
+  },
+});
+
+// Called by the client right before signOut() clears the session, while the
+// identity is still resolvable.
+export const recordLogout = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return;
+    const user = await ctx.db.get(userId);
+    if (!user) return;
+
+    await ctx.db.insert("auditLog", {
+      userId,
+      userName: user.name ?? user.email ?? "Unknown",
+      action: "user.logout",
+      recordType: "users",
+      recordId: userId,
+      timestamp: Date.now(),
+    });
+  },
+});
+
 export const logAudit = internalMutation({
   args: {
     userId: v.id("users"),

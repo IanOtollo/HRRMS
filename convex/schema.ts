@@ -270,7 +270,9 @@ export default defineSchema({
   }).index("by_employee", ["employeeId"]),
 
   auditLog: defineTable({
-    userId: v.id("users"),
+    // Optional because a failed login attempt (wrong password, or an email
+    // that matches no account) has no authenticated user to attribute it to.
+    userId: v.optional(v.id("users")),
     userName: v.string(),
     action: v.string(),
     recordType: v.string(),

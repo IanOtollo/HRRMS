@@ -120,20 +120,31 @@ export default function AuditLogPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((r, i) => (
-                  <motion.tr
-                    key={r._id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: Math.min(i, 15) * 0.015 }}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600 font-mono">{new Date(r.timestamp).toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-[13px] font-bold text-[#202b5d]">{r.userName}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-600">{r.action}</td>
-                    <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.recordType}{r.recordId ? ` · ${r.recordId.slice(-8)}` : ""}</td>
-                  </motion.tr>
-                ))
+                filtered.map((r, i) => {
+                  const isFailedLogin = r.action === "user.loginFailed";
+                  return (
+                    <motion.tr
+                      key={r._id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: Math.min(i, 15) * 0.015 }}
+                      className={`transition-colors ${isFailedLogin ? "bg-rust-700/5 hover:bg-rust-700/10" : "hover:bg-slate-50"}`}
+                    >
+                      <td className="px-4 py-2.5 text-[12px] text-slate-600 font-mono">{new Date(r.timestamp).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-[13px] font-bold text-[#202b5d]">{r.userName}</td>
+                      <td className="px-4 py-2.5 text-[12px]">
+                        {isFailedLogin ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rust-700/10 text-rust-700 uppercase tracking-wider">
+                            Failed Login
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">{r.action}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.recordType}{r.recordId ? ` · ${r.recordId.slice(-8)}` : ""}</td>
+                    </motion.tr>
+                  );
+                })
               )}
             </tbody>
           </table>

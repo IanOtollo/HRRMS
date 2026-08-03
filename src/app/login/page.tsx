@@ -6,10 +6,14 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuthActions();
+  const recordLoginSuccess = useMutation(api.users.recordLoginSuccess);
+  const recordLoginFailure = useMutation(api.users.recordLoginFailure);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,8 +27,10 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
+      await recordLoginSuccess({}).catch(() => {});
       router.push("/dashboard");
     } catch (err: any) {
+      recordLoginFailure({ email }).catch(() => {});
       setError(
         err?.message?.includes("InvalidAccountId") ||
           err?.message?.includes("InvalidSecret")

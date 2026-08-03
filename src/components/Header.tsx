@@ -5,6 +5,8 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import NotificationBell from "@/components/NotificationBell";
 
 type CurrentUser = {
@@ -23,6 +25,7 @@ export default function Header({
   const pathname = usePathname();
   const router = useRouter();
   const { signOut } = useAuthActions();
+  const recordLogout = useMutation(api.users.recordLogout);
   const [searchQuery, setSearchQuery] = useState("");
 
   const breadcrumbs = pathname
@@ -38,6 +41,7 @@ export default function Header({
   };
 
   const handleSignOut = async () => {
+    await recordLogout({}).catch(() => {});
     await signOut();
     router.push("/login");
   };
