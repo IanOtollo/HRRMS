@@ -1,12 +1,23 @@
 "use client";
 
-import { Users, FileDigit, UploadCloud, Scale, FolderOpen, CheckCircle2, ArrowUpRight } from "lucide-react";
+import { Users, FileDigit, UploadCloud, Scale, ArrowUpRight, Bell, Clock, AlertOctagon } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { STAGE_LABELS } from "@/lib/disciplinaryStages";
 
 const ease = [0.16, 1, 0.3, 1] as const;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / DAY_MS);
+}
 
 export default function DashboardPage() {
   const currentUser = useQuery(api.users.me);
@@ -17,15 +28,29 @@ export default function DashboardPage() {
     api.disciplinaryRecords.list,
     currentUser?.role && currentUser.role !== "department_viewer" ? {} : "skip"
   ) || [];
-  const verifyDoc = useMutation(api.documents.verify);
-
-  const canVerify = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
 
   const stats = {
     totalEmployees: employees.length,
     pendingUploads: pendingDocs.length,
     activeDisciplinary: disciplinaryRecords.filter((r) => r.stage !== "closed").length,
   };
+
+  const employeeName = (id: string) => employees.find((e) => e._id === id)?.fullName ?? "Unknown";
+
+  const activeDisciplinaryCases = disciplinaryRecords
+    .filter((r) => r.stage !== "closed")
+    .sort((a, b) => b.openedAt - a.openedAt);
+
+  const retiringSoon = employees
+    .filter((e) => e.employmentStatus === "active" && e.retirementDate)
+    .map((e) => ({ ...e, daysLeft: daysUntil(e.retirementDate) }))
+    .filter((e) => e.daysLeft >= 0 && e.daysLeft <= 30)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
+  const retiringUrgent = retiringSoon.filter((e) => e.daysLeft <= 15);
+  const retiringUpcoming = retiringSoon.filter((e) => e.daysLeft > 15);
+
+  const notificationCount = activeDisciplinaryCases.length + retiringSoon.length;
 
   return (
     <div className="p-4 md:p-6">
@@ -71,7 +96,6 @@ export default function DashboardPage() {
 
       {/* Row 2 */}
       <div className="grid grid-cols-1 gap-6">
-        {/* Documents Awaiting Verification */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -80,55 +104,120 @@ export default function DashboardPage() {
           className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[320px] flex flex-col"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[14px] uppercase tracking-wider font-bold text-slate-600">Pending Verification</h2>
-            <Link href="/digitization-queue" className="text-[12px] text-blue-600 hover:underline font-bold">
-              View All
-            </Link>
+            <h2 className="text-[14px] uppercase tracking-wider font-bold text-slate-600 flex items-center gap-2">
+              <Bell size={15} /> System Notifications
+              {notificationCount > 0 && (
+                <span className="text-[10px] font-bold bg-red-100 text-red-700 rounded-full px-2 py-0.5">
+                  {notificationCount}
+                </span>
+              )}
+            </h2>
           </div>
 
-          {pendingDocs.length > 0 ? (
-            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                    <th className="pb-2">Employee</th>
-                    <th className="pb-2">Filename</th>
-                    {canVerify && <th className="pb-2 text-right">Action</th>}
-                  </tr>
-                </thead>
-                <tbody className="text-[13px]">
-                  {pendingDocs.map((doc, i) => (
-                    <motion.tr
-                      key={doc._id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.2, delay: i * 0.03 }}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
-                    >
-                      <td className="py-2.5">
-                        <div className="font-bold text-[#202b5d]">{doc.employeeName}</div>
-                      </td>
-                      <td className="py-2.5 text-slate-600 truncate max-w-[140px]">{doc.originalFilename}</td>
-                      {canVerify && (
-                        <td className="py-2.5 text-right">
-                          <button
-                            onClick={() => verifyDoc({ documentId: doc._id })}
-                            className="h-7 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded transition-colors inline-flex items-center gap-1"
-                          >
-                            <CheckCircle2 size={12} /> Verify
-                          </button>
-                        </td>
-                      )}
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+          {notificationCount === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <Bell size={24} className="mb-2 opacity-20" />
+              <p className="text-[13px] font-bold text-slate-600">No active notifications</p>
+              <p className="text-[11px] mt-1">Disciplinary cases and upcoming retirements will show up here.</p>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-              <FolderOpen size={24} className="mb-2 opacity-20" />
-              <p className="text-[13px] font-bold text-slate-600">No pending documents</p>
-              <p className="text-[11px] mt-1">You're all caught up!</p>
+            <div className="space-y-5 max-h-[420px] overflow-y-auto">
+              {activeDisciplinaryCases.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Active Disciplinary Cases</p>
+                  <div className="space-y-1.5">
+                    {activeDisciplinaryCases.map((rec, i) => (
+                      <motion.div
+                        key={rec._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.03 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+                          <Scale size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-[#202b5d] truncate">{employeeName(rec.employeeId)}</p>
+                          <p className="text-[11px] text-slate-500">{STAGE_LABELS[rec.stage]}</p>
+                        </div>
+                        <Link
+                          href="/disciplinary"
+                          className="text-[11px] font-bold text-blue-600 hover:underline shrink-0"
+                        >
+                          View
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {retiringUrgent.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Retiring Within 15 Days</p>
+                  <div className="space-y-1.5">
+                    {retiringUrgent.map((e, i) => (
+                      <motion.div
+                        key={e._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.03 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-rust-700/10 text-rust-700 flex items-center justify-center shrink-0">
+                          <AlertOctagon size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-[#202b5d] truncate">{e.fullName}</p>
+                          <p className="text-[11px] text-rust-700 font-semibold">
+                            Retires in {e.daysLeft} {e.daysLeft === 1 ? "day" : "days"} ({e.retirementDate})
+                          </p>
+                        </div>
+                        <Link
+                          href={`/employees/${e._id}`}
+                          className="text-[11px] font-bold text-blue-600 hover:underline shrink-0"
+                        >
+                          View
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {retiringUpcoming.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Retiring Within 30 Days</p>
+                  <div className="space-y-1.5">
+                    {retiringUpcoming.map((e, i) => (
+                      <motion.div
+                        key={e._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.03 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                          <Clock size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-[#202b5d] truncate">{e.fullName}</p>
+                          <p className="text-[11px] text-amber-600 font-semibold">
+                            Retires in {e.daysLeft} days ({e.retirementDate})
+                          </p>
+                        </div>
+                        <Link
+                          href={`/employees/${e._id}`}
+                          className="text-[11px] font-bold text-blue-600 hover:underline shrink-0"
+                        >
+                          View
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </motion.div>
