@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, FileDigit, UploadCloud, Scale, ArrowUpRight, Bell, Clock, AlertOctagon } from "lucide-react";
+import { Users, FileDigit, UploadCloud, Scale, ArrowUpRight, Bell, Clock, AlertOctagon, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useQuery } from "convex/react";
@@ -17,6 +17,16 @@ function daysUntil(dateStr: string): number {
   const target = new Date(dateStr);
   target.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - today.getTime()) / DAY_MS);
+}
+
+function wasMinorAtHire(dob?: string, appointmentDate?: string): boolean {
+  if (!dob || !appointmentDate) return false;
+  const d = new Date(dob);
+  const a = new Date(appointmentDate);
+  let age = a.getFullYear() - d.getFullYear();
+  const monthDiff = a.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && a.getDate() < d.getDate())) age--;
+  return age < 18;
 }
 
 export default function DashboardPage() {
@@ -50,7 +60,9 @@ export default function DashboardPage() {
   const retiringUrgent = retiringSoon.filter((e) => e.daysLeft <= 15);
   const retiringUpcoming = retiringSoon.filter((e) => e.daysLeft > 15);
 
-  const notificationCount = activeDisciplinaryCases.length + retiringSoon.length;
+  const minorAtHireFlags = employees.filter((e) => wasMinorAtHire(e.dateOfBirth, e.firstAppointmentDate));
+
+  const notificationCount = activeDisciplinaryCases.length + retiringSoon.length + minorAtHireFlags.length;
 
   return (
     <div className="p-4 md:p-6">
@@ -205,6 +217,39 @@ export default function DashboardPage() {
                           <p className="text-[13px] font-bold text-[#202b5d] truncate">{e.fullName}</p>
                           <p className="text-[11px] text-amber-600 font-semibold">
                             Retires in {e.daysLeft} days ({e.retirementDate})
+                          </p>
+                        </div>
+                        <Link
+                          href={`/employees/${e._id}`}
+                          className="text-[11px] font-bold text-blue-600 hover:underline shrink-0"
+                        >
+                          View
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {minorAtHireFlags.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Hired Under 18 (Pre-Policy Review)</p>
+                  <div className="space-y-1.5">
+                    {minorAtHireFlags.map((e, i) => (
+                      <motion.div
+                        key={e._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: Math.min(i, 10) * 0.03 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                          <AlertTriangle size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-[#202b5d] truncate">{e.fullName}</p>
+                          <p className="text-[11px] text-amber-600 font-semibold">
+                            DOB {e.dateOfBirth} · Appointed {e.firstAppointmentDate}
                           </p>
                         </div>
                         <Link

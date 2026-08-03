@@ -602,6 +602,11 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
   const isExited = employee.employmentStatus === "retired" || employee.employmentStatus === "terminated";
   const isFrozen = isExited || isExpiredContract;
   const canRenew = isExpiredContract && canEdit;
+  // Flags records from before the 18+-at-hire rule was enforced.
+  const wasMinorAtHire =
+    !!employee.dateOfBirth &&
+    !!employee.firstAppointmentDate &&
+    calculateAgeAt(employee.dateOfBirth, employee.firstAppointmentDate) < 18;
 
   const handleRenew = async () => {
     if (!renewDate) {
@@ -717,6 +722,14 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
               {employee.isBlacklisted && (
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rust-700 text-white uppercase tracking-wider align-middle">
                   Blacklisted
+                </span>
+              )}
+              {wasMinorAtHire && (
+                <span
+                  title="Was under 18 on their date of appointment — predates the minimum-age policy"
+                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500 text-white uppercase tracking-wider align-middle"
+                >
+                  Hired Under 18 (Pre-Policy)
                 </span>
               )}
             </h1>

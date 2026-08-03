@@ -15,6 +15,16 @@ const rowVariants = {
   show: { opacity: 1, y: 0 },
 };
 
+function wasMinorAtHire(dob?: string, appointmentDate?: string): boolean {
+  if (!dob || !appointmentDate) return false;
+  const d = new Date(dob);
+  const a = new Date(appointmentDate);
+  let age = a.getFullYear() - d.getFullYear();
+  const monthDiff = a.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && a.getDate() < d.getDate())) age--;
+  return age < 18;
+}
+
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "on_leave", label: "On Leave" },
@@ -215,6 +225,14 @@ function EmployeesPageInner() {
                         {emp.isBlacklisted && (
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rust-700 text-white uppercase tracking-wider">
                             Blacklisted
+                          </span>
+                        )}
+                        {wasMinorAtHire(emp.dateOfBirth, emp.firstAppointmentDate) && (
+                          <span
+                            title="Was under 18 on their date of appointment — predates the minimum-age policy"
+                            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500 text-white uppercase tracking-wider"
+                          >
+                            Under 18 at Hire
                           </span>
                         )}
                       </span>
