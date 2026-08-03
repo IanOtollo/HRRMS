@@ -36,14 +36,17 @@ export const list = query({
     const effectiveDepartmentId =
       user.role === "department_viewer" ? user.departmentId : args.departmentId;
 
+    // No cap here — this list is used for search/filter/pickers across the
+    // whole app, so capping it silently hides employees created before the
+    // cutoff instead of just being a performance tradeoff.
     let results;
     if (effectiveDepartmentId) {
       results = await ctx.db.query("employees")
         .withIndex("by_department", (q) =>
           q.eq("departmentId", effectiveDepartmentId)
-        ).take(100);
+        ).collect();
     } else {
-      results = await ctx.db.query("employees").order("desc").take(100);
+      results = await ctx.db.query("employees").order("desc").collect();
     }
 
     if (args.employmentStatus) {

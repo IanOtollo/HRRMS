@@ -162,11 +162,13 @@ export const listPending = query({
   handler: async (ctx) => {
     await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
+    // No cap — a big digitization push can easily exceed the old 50-doc
+    // limit, which was silently hiding older pending docs from the queue.
     const docs = await ctx.db
       .query("documents")
       .withIndex("by_status", (q) => q.eq("status", "uploaded"))
       .order("desc")
-      .take(50);
+      .collect();
 
     const withEmployeeNames = await Promise.all(
       docs.map(async (doc) => {
