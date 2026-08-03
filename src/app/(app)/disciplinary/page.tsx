@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Scale, Plus, AlertTriangle, ShieldOff, ExternalLink, Save, Lock, CheckCircle2 } from "lucide-react";
 import ErrorState from "@/components/ErrorState";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -21,7 +22,7 @@ import {
   OUTCOME_LABELS,
 } from "@/lib/disciplinaryStages";
 
-export default function DisciplinaryPage() {
+function DisciplinaryPageInner() {
   const currentUser = useQuery(api.users.me);
 
   if (currentUser === undefined) return null;
@@ -42,9 +43,21 @@ export default function DisciplinaryPage() {
   return <DisciplinaryContent currentUser={currentUser} />;
 }
 
+export default function DisciplinaryPage() {
+  return (
+    <Suspense fallback={null}>
+      <DisciplinaryPageInner />
+    </Suspense>
+  );
+}
+
 function DisciplinaryContent({ currentUser }: { currentUser: any }) {
+  const searchParams = useSearchParams();
+  const caseParam = searchParams.get("case");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedCaseId, setSelectedCaseId] = useState<Id<"disciplinaryRecords"> | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<Id<"disciplinaryRecords"> | null>(
+    caseParam as Id<"disciplinaryRecords"> | null
+  );
   const records = useQuery(api.disciplinaryRecords.list) || [];
   const employees = useQuery(api.employees.list, {}) || [];
   const openCase = useMutation(api.disciplinaryRecords.openCase);
@@ -55,6 +68,10 @@ function DisciplinaryContent({ currentUser }: { currentUser: any }) {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
   const [confirmOpenCase, setConfirmOpenCase] = useState(false);
+
+  useEffect(() => {
+    if (caseParam) setSelectedCaseId(caseParam as Id<"disciplinaryRecords">);
+  }, [caseParam]);
 
   const employeeFor = (id: string) => employees.find((e) => e._id === id);
   const employeeName = (id: string) => employeeFor(id)?.fullName ?? "Unknown";

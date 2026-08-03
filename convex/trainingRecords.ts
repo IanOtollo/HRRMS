@@ -42,6 +42,9 @@ export const logTraining = mutation({
 
     const employee = await ctx.db.get(args.employeeId);
     if (!employee) throw new ConvexError("Employee not found");
+    if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
+      throw new ConvexError(`${employee.fullName} has already exited service and cannot be nominated for training`);
+    }
 
     const id = await ctx.db.insert("trainingRecords", {
       employeeId: args.employeeId,

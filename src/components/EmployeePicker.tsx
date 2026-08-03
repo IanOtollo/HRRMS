@@ -12,12 +12,20 @@ export default function EmployeePicker({
   value,
   onChange,
   placeholder = "Search by name, ID, or P/F number...",
+  includeExited = false,
 }: {
   value: Employee | null;
   onChange: (employee: Employee | null) => void;
   placeholder?: string;
+  // Retired/terminated employees are hidden by default — they shouldn't be
+  // selectable for any new HR action (disciplinary case, training, exit
+  // pipeline, system user invite, etc.).
+  includeExited?: boolean;
 }) {
-  const employees = useQuery(api.employees.list, {}) || [];
+  const allEmployees = useQuery(api.employees.list, {}) || [];
+  const employees = includeExited
+    ? allEmployees
+    : allEmployees.filter((e) => e.employmentStatus !== "retired" && e.employmentStatus !== "terminated");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);

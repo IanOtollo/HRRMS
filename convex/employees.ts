@@ -91,16 +91,17 @@ export const checkFieldAvailable = query({
     const value = args.value.trim();
     if (!value) return { available: true };
 
+    // Using .collect() instead of .unique() here — legacy/seed data may
+    // already contain duplicates, and this check must never crash on that;
+    // it only needs to know whether any *other* employee holds this value.
     const index = UNIQUE_FIELD_INDEX[args.field];
-    const existing = await ctx.db
+    const matches = await ctx.db
       .query("employees")
       .withIndex(index, (q) => q.eq(args.field as never, value))
-      .unique();
+      .collect();
 
-    if (!existing || existing._id === args.excludeId) {
-      return { available: true };
-    }
-    return { available: false };
+    const conflict = matches.find((m) => m._id !== args.excludeId);
+    return { available: !conflict };
   },
 });
 
@@ -195,7 +196,7 @@ export const create = mutation({
     const pfClash = await ctx.db
       .query("employees")
       .withIndex("by_pf", (q) => q.eq("pfNumber", args.pfNumber))
-      .unique();
+      .first();
     if (pfClash) {
       throw new ConvexError(`P/F Number ${args.pfNumber} is already assigned to another employee`);
     }
@@ -203,7 +204,7 @@ export const create = mutation({
     const idClash = await ctx.db
       .query("employees")
       .withIndex("by_national_id", (q) => q.eq("nationalId", args.nationalId))
-      .unique();
+      .first();
     if (idClash) {
       throw new ConvexError(`National ID ${args.nationalId} is already assigned to another employee`);
     }
@@ -212,7 +213,7 @@ export const create = mutation({
       const phoneClash = await ctx.db
         .query("employees")
         .withIndex("by_phone", (q) => q.eq("phoneNumber", args.phoneNumber))
-        .unique();
+        .first();
       if (phoneClash) {
         throw new ConvexError(`Phone number ${args.phoneNumber} is already assigned to another employee`);
       }
@@ -222,7 +223,7 @@ export const create = mutation({
       const emailClash = await ctx.db
         .query("employees")
         .withIndex("by_email", (q) => q.eq("emailAddress", args.emailAddress))
-        .unique();
+        .first();
       if (emailClash) {
         throw new ConvexError(`Email address ${args.emailAddress} is already assigned to another employee`);
       }
@@ -272,11 +273,11 @@ export const updateField = mutation({
     };
     const check = uniqueFieldChecks[args.field];
     if (check && args.value) {
-      const existing = await ctx.db
+      const matches = await ctx.db
         .query("employees")
         .withIndex(check.index, (q) => q.eq(args.field as never, args.value))
-        .unique();
-      if (existing && existing._id !== args.id) {
+        .collect();
+      if (matches.some((m) => m._id !== args.id)) {
         throw new ConvexError(`${check.label} ${args.value} is already assigned to another employee`);
       }
     }

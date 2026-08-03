@@ -66,6 +66,9 @@ export const openCase = mutation({
 
     const employee = await ctx.db.get(args.employeeId);
     if (!employee) throw new ConvexError("Employee not found");
+    if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
+      throw new ConvexError(`${employee.fullName} has already exited service and cannot have a new disciplinary case opened`);
+    }
 
     if (args.restrictedNotes && user.role === "records_officer") {
       throw new ConvexError("Records Officer cannot record confidential notes");

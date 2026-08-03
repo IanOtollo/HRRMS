@@ -57,6 +57,9 @@ export const initiateExit = mutation({
 
     const employee = await ctx.db.get(args.employeeId);
     if (!employee) throw new ConvexError("Employee not found");
+    if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
+      throw new ConvexError(`${employee.fullName} has already exited service — a new clearance pipeline cannot be started`);
+    }
 
     const id = await ctx.db.insert("exitRecords", {
       employeeId: args.employeeId,

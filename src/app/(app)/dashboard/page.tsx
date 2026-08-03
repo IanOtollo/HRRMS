@@ -142,7 +142,7 @@ export default function DashboardPage() {
                           <p className="text-[11px] text-slate-500">{STAGE_LABELS[rec.stage]}</p>
                         </div>
                         <Link
-                          href="/disciplinary"
+                          href={`/disciplinary?case=${rec._id}`}
                           className="text-[11px] font-bold text-blue-600 hover:underline shrink-0"
                         >
                           View

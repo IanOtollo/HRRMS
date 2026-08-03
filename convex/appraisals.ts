@@ -75,6 +75,8 @@ export const initiateCycle = mutation({
 
     let created = 0;
     for (const emp of employees) {
+      if (emp.employmentStatus === "retired" || emp.employmentStatus === "terminated") continue;
+
       const existing = await ctx.db
         .query("appraisals")
         .withIndex("by_employee", (q) => q.eq("employeeId", emp._id))
