@@ -6,6 +6,8 @@ import { requireRole } from "./lib/rbac";
 import { userRoleValidator } from "./schema";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { audited, toErrorMessage } from "./lib/audit";
+import { FunctionReturnType } from "convex/server";
 
 export const me = query({
   args: {},
@@ -47,37 +49,52 @@ export const create = action({
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args): Promise<Id<"users">> => {
-    const caller = await ctx.runQuery(api.users.me, {});
-    if (!caller || caller.role !== "super_admin") {
-      throw new ConvexError("Access denied: only a Super Administrator can create users");
+    // Actions don't have direct ctx.db access, so identity + audit writes go
+    // through internal.users.logAudit rather than the audited() ctx.db helper.
+    let caller: FunctionReturnType<typeof api.users.me> = null;
+    try {
+      caller = await ctx.runQuery(api.users.me, {});
+      if (!caller || caller.role !== "super_admin") {
+        throw new ConvexError("Access denied: only a Super Administrator can create users");
+      }
+
+      if (args.role === "department_viewer" && !args.departmentId) {
+        throw new ConvexError("Department Viewer accounts must be assigned a department");
+      }
+
+      const { user } = await createAccount(ctx, {
+        provider: "password",
+        account: { id: args.email, secret: args.password },
+        profile: {
+          email: args.email,
+          name: args.name,
+          role: args.role,
+          departmentId: args.departmentId,
+          isActive: true,
+          createdAt: Date.now(),
+        },
+      });
+
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller._id,
+        userName: caller.name ?? "Unknown",
+        action: "user.create",
+        recordId: user._id,
+        details: { email: args.email, role: args.role },
+        status: "success",
+      });
+
+      return user._id;
+    } catch (err) {
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller?._id,
+        userName: caller?.name ?? "Unauthenticated",
+        action: "user.create",
+        status: "error",
+        errorMessage: toErrorMessage(err),
+      });
+      throw err;
     }
-
-    if (args.role === "department_viewer" && !args.departmentId) {
-      throw new ConvexError("Department Viewer accounts must be assigned a department");
-    }
-
-    const { user } = await createAccount(ctx, {
-      provider: "password",
-      account: { id: args.email, secret: args.password },
-      profile: {
-        email: args.email,
-        name: args.name,
-        role: args.role,
-        departmentId: args.departmentId,
-        isActive: true,
-        createdAt: Date.now(),
-      },
-    });
-
-    await ctx.runMutation(internal.users.logAudit, {
-      userId: caller._id,
-      userName: caller.name ?? "Unknown",
-      action: "user.create",
-      recordId: user._id,
-      details: { email: args.email, role: args.role },
-    });
-
-    return user._id;
   },
 });
 
@@ -87,34 +104,47 @@ export const changePassword = action({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
-    const caller = await ctx.runQuery(api.users.me, {});
-    if (!caller || !caller.email) {
-      throw new ConvexError("Not authenticated");
-    }
-
-    if (args.newPassword.length < 8) {
-      throw new ConvexError("New password must be at least 8 characters");
-    }
-
+    let caller: FunctionReturnType<typeof api.users.me> = null;
     try {
-      await ctx.runAction(api.auth.signIn, {
+      caller = await ctx.runQuery(api.users.me, {});
+      if (!caller || !caller.email) {
+        throw new ConvexError("Not authenticated");
+      }
+
+      if (args.newPassword.length < 8) {
+        throw new ConvexError("New password must be at least 8 characters");
+      }
+
+      try {
+        await ctx.runAction(api.auth.signIn, {
+          provider: "password",
+          params: { email: caller.email, password: args.currentPassword, flow: "signIn" },
+        });
+      } catch {
+        throw new ConvexError("Current password is incorrect");
+      }
+
+      await modifyAccountCredentials(ctx, {
         provider: "password",
-        params: { email: caller.email, password: args.currentPassword, flow: "signIn" },
+        account: { id: caller.email, secret: args.newPassword },
       });
-    } catch {
-      throw new ConvexError("Current password is incorrect");
+
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller._id,
+        userName: caller.name ?? "Unknown",
+        action: "user.changePassword",
+        status: "success",
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller?._id,
+        userName: caller?.name ?? "Unauthenticated",
+        action: "user.changePassword",
+        status: "error",
+        errorMessage: toErrorMessage(err),
+      });
+      throw err;
     }
-
-    await modifyAccountCredentials(ctx, {
-      provider: "password",
-      account: { id: caller.email, secret: args.newPassword },
-    });
-
-    await ctx.runMutation(internal.users.logAudit, {
-      userId: caller._id,
-      userName: caller.name ?? "Unknown",
-      action: "user.changePassword",
-    });
   },
 });
 
@@ -125,23 +155,17 @@ export const updateRole = mutation({
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args) => {
-    const caller = await requireRole(ctx, ["super_admin"]);
-    const target = await ctx.db.get(args.id);
-    if (!target) throw new ConvexError("User not found");
+    return audited(ctx, { action: "user.updateRole", recordType: "users", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin"]);
+      const target = await ctx.db.get(args.id);
+      if (!target) throw new ConvexError("User not found");
 
-    await ctx.db.patch(args.id, {
-      role: args.role,
-      departmentId: args.departmentId,
-    });
+      await ctx.db.patch(args.id, {
+        role: args.role,
+        departmentId: args.departmentId,
+      });
 
-    await ctx.db.insert("auditLog", {
-      userId: caller._id,
-      userName: caller.name ?? "Unknown",
-      action: "user.updateRole",
-      recordType: "users",
-      recordId: args.id,
-      timestamp: Date.now(),
-      details: { role: args.role },
+      return { result: null, details: { fromRole: target.role, toRole: args.role } };
     });
   },
 });
@@ -152,25 +176,24 @@ export const setActive = mutation({
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const caller = await requireRole(ctx, ["super_admin"]);
+    return audited(
+      ctx,
+      { action: args.isActive ? "user.activate" : "user.deactivate", recordType: "users", recordId: args.id },
+      async () => {
+        const caller = await requireRole(ctx, ["super_admin"]);
 
-    if (caller._id === args.id && !args.isActive) {
-      throw new ConvexError("You cannot deactivate your own account");
-    }
+        if (caller._id === args.id && !args.isActive) {
+          throw new ConvexError("You cannot deactivate your own account");
+        }
 
-    const target = await ctx.db.get(args.id);
-    if (!target) throw new ConvexError("User not found");
+        const target = await ctx.db.get(args.id);
+        if (!target) throw new ConvexError("User not found");
 
-    await ctx.db.patch(args.id, { isActive: args.isActive });
+        await ctx.db.patch(args.id, { isActive: args.isActive });
 
-    await ctx.db.insert("auditLog", {
-      userId: caller._id,
-      userName: caller.name ?? "Unknown",
-      action: args.isActive ? "user.activate" : "user.deactivate",
-      recordType: "users",
-      recordId: args.id,
-      timestamp: Date.now(),
-    });
+        return { result: null, details: { fromActive: target.isActive ?? true, toActive: args.isActive } };
+      }
+    );
   },
 });
 
@@ -193,6 +216,7 @@ export const recordLoginSuccess = mutation({
       recordType: "users",
       recordId: userId,
       timestamp: Date.now(),
+      status: "success",
     });
   },
 });
@@ -219,6 +243,8 @@ export const recordLoginFailure = mutation({
       recordId: existing?._id,
       timestamp: Date.now(),
       details: { email },
+      status: "error",
+      errorMessage: "Invalid credentials",
     });
   },
 });
@@ -240,17 +266,22 @@ export const recordLogout = mutation({
       recordType: "users",
       recordId: userId,
       timestamp: Date.now(),
+      status: "success",
     });
   },
 });
 
 export const logAudit = internalMutation({
   args: {
-    userId: v.id("users"),
+    // Optional so a failure before identity is resolved (e.g. not signed in)
+    // can still be logged, same as the rest of the auditLog table.
+    userId: v.optional(v.id("users")),
     userName: v.string(),
     action: v.string(),
     recordId: v.optional(v.string()),
     details: v.optional(v.any()),
+    status: v.optional(v.union(v.literal("success"), v.literal("error"))),
+    errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("auditLog", {
@@ -261,6 +292,8 @@ export const logAudit = internalMutation({
       recordId: args.recordId,
       timestamp: Date.now(),
       details: args.details,
+      status: args.status ?? "success",
+      errorMessage: args.errorMessage,
     });
   },
 });

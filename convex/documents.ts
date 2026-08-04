@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole } from "./lib/rbac";
 import { ConvexError } from "convex/values";
+import { audited } from "./lib/audit";
 
 // Keep in sync with src/lib/documentCategories.ts — these categories hold
 // one canonical document per employee, regardless of which screen the
@@ -38,67 +39,54 @@ export const finalizeUpload = mutation({
     originalFilename: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "document.upload", recordType: "documents" }, async () => {
+      const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    if (SINGLE_UPLOAD_CATEGORIES.includes(args.category)) {
-      const existing = await ctx.db
-        .query("documents")
-        .withIndex("by_employee", (q) => q.eq("employeeId", args.employeeId))
-        .filter((q) => q.eq(q.field("category"), args.category))
-        .first();
-      if (existing) {
-        throw new ConvexError(
-          "This employee already has a document on file for this category. Delete the existing one first to upload a replacement."
-        );
+      if (SINGLE_UPLOAD_CATEGORIES.includes(args.category)) {
+        const existing = await ctx.db
+          .query("documents")
+          .withIndex("by_employee", (q) => q.eq("employeeId", args.employeeId))
+          .filter((q) => q.eq(q.field("category"), args.category))
+          .first();
+        if (existing) {
+          throw new ConvexError(
+            "This employee already has a document on file for this category. Delete the existing one first to upload a replacement."
+          );
+        }
       }
-    }
 
-    const id = await ctx.db.insert("documents", {
-      employeeId: args.employeeId,
-      category: args.category,
-      clusterTab: args.clusterTab,
-      storageId: args.storageId,
-      originalFilename: args.originalFilename,
-      uploadedBy: user._id,
-      uploadedAt: Date.now(),
-      status: "uploaded",
+      const id = await ctx.db.insert("documents", {
+        employeeId: args.employeeId,
+        category: args.category,
+        clusterTab: args.clusterTab,
+        storageId: args.storageId,
+        originalFilename: args.originalFilename,
+        uploadedBy: user._id,
+        uploadedAt: Date.now(),
+        status: "uploaded",
+      });
+
+      return { result: id, recordId: id, details: { category: args.category } };
     });
-
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "document.upload",
-      recordType: "documents",
-      recordId: id,
-      timestamp: Date.now(),
-      details: { category: args.category },
-    });
-
-    return id;
   },
 });
 
 export const verify = mutation({
   args: { documentId: v.id("documents") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
-    
-    const doc = await ctx.db.get(args.documentId);
-    if (!doc) throw new ConvexError("Document not found");
+    return audited(ctx, { action: "document.verify", recordType: "documents", recordId: args.documentId }, async () => {
+      const user = await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    await ctx.db.patch(args.documentId, {
-      status: "verified",
-      verifiedBy: user._id,
-      verifiedAt: Date.now(),
-    });
+      const doc = await ctx.db.get(args.documentId);
+      if (!doc) throw new ConvexError("Document not found");
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "document.verify",
-      recordType: "documents",
-      recordId: args.documentId,
-      timestamp: Date.now(),
+      await ctx.db.patch(args.documentId, {
+        status: "verified",
+        verifiedBy: user._id,
+        verifiedAt: Date.now(),
+      });
+
+      return { result: null };
     });
   },
 });
@@ -106,24 +94,18 @@ export const verify = mutation({
 export const remove = mutation({
   args: { documentId: v.id("documents") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "document.remove", recordType: "documents", recordId: args.documentId }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const doc = await ctx.db.get(args.documentId);
-    if (!doc) throw new ConvexError("Document not found");
+      const doc = await ctx.db.get(args.documentId);
+      if (!doc) throw new ConvexError("Document not found");
 
-    if (doc.storageId) {
-      await ctx.storage.delete(doc.storageId);
-    }
-    await ctx.db.delete(args.documentId);
+      if (doc.storageId) {
+        await ctx.storage.delete(doc.storageId);
+      }
+      await ctx.db.delete(args.documentId);
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "document.remove",
-      recordType: "documents",
-      recordId: args.documentId,
-      timestamp: Date.now(),
-      details: { category: doc.category, filename: doc.originalFilename },
+      return { result: null, details: { category: doc.category, filename: doc.originalFilename } };
     });
   },
 });
@@ -131,10 +113,17 @@ export const remove = mutation({
 export const updateStatus = mutation({
   args: { documentId: v.id("documents"), status: v.union(v.literal("not_uploaded"), v.literal("uploaded"), v.literal("verified")) },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
-    
-    await ctx.db.patch(args.documentId, {
-      status: args.status,
+    return audited(ctx, { action: "document.updateStatus", recordType: "documents", recordId: args.documentId }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director"]);
+
+      const doc = await ctx.db.get(args.documentId);
+      if (!doc) throw new ConvexError("Document not found");
+
+      await ctx.db.patch(args.documentId, {
+        status: args.status,
+      });
+
+      return { result: null, details: { fromStatus: doc.status, toStatus: args.status } };
     });
   },
 });

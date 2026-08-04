@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireRole } from "./lib/rbac";
+import { audited } from "./lib/audit";
 
 export const list = query({
   handler: async (ctx) => {
@@ -53,33 +54,25 @@ export const initiateExit = mutation({
     noticeDate: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "exit.initiate", recordType: "exitRecords" }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const employee = await ctx.db.get(args.employeeId);
-    if (!employee) throw new ConvexError("Employee not found");
-    if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
-      throw new ConvexError(`${employee.fullName} has already exited service — a new clearance pipeline cannot be started`);
-    }
+      const employee = await ctx.db.get(args.employeeId);
+      if (!employee) throw new ConvexError("Employee not found");
+      if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
+        throw new ConvexError(`${employee.fullName} has already exited service — a new clearance pipeline cannot be started`);
+      }
 
-    const id = await ctx.db.insert("exitRecords", {
-      employeeId: args.employeeId,
-      exitType: args.exitType,
-      stage: "notice_filed",
-      noticeDate: args.noticeDate,
-      documentIds: [],
+      const id = await ctx.db.insert("exitRecords", {
+        employeeId: args.employeeId,
+        exitType: args.exitType,
+        stage: "notice_filed",
+        noticeDate: args.noticeDate,
+        documentIds: [],
+      });
+
+      return { result: id, recordId: id, details: { exitType: args.exitType } };
     });
-
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "exit.initiate",
-      recordType: "exitRecords",
-      recordId: id,
-      timestamp: Date.now(),
-      details: { exitType: args.exitType },
-    });
-
-    return id;
   },
 });
 
@@ -89,20 +82,15 @@ export const updateNotes = mutation({
     notes: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "exit.updateNotes", recordType: "exitRecords", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const record = await ctx.db.get(args.id);
-    if (!record) throw new ConvexError("Exit record not found");
+      const record = await ctx.db.get(args.id);
+      if (!record) throw new ConvexError("Exit record not found");
 
-    await ctx.db.patch(args.id, { notes: args.notes });
+      await ctx.db.patch(args.id, { notes: args.notes });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "exit.updateNotes",
-      recordType: "exitRecords",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null, details: { field: "notes" } };
     });
   },
 });
@@ -113,39 +101,33 @@ export const advanceStage = mutation({
     stage: stageValidator,
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "exit.advanceStage", recordType: "exitRecords", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const record = await ctx.db.get(args.id);
-    if (!record) throw new ConvexError("Exit record not found");
+      const record = await ctx.db.get(args.id);
+      if (!record) throw new ConvexError("Exit record not found");
 
-    const isFinalizing = args.stage === "finalized";
+      const isFinalizing = args.stage === "finalized";
 
-    await ctx.db.patch(args.id, {
-      stage: args.stage,
-      finalizedDate: isFinalizing
-        ? new Date().toISOString().slice(0, 10)
-        : record.finalizedDate,
-    });
-
-    if (isFinalizing) {
-      // employmentStatus only has "retired" / "terminated" as exit states;
-      // the exitType itself is the source of truth for the legal grounds.
-      const retirementLike = ["retirement_age", "ill_health", "public_interest"];
-      const newStatus = retirementLike.includes(record.exitType) ? "retired" : "terminated";
-      await ctx.db.patch(record.employeeId, {
-        employmentStatus: newStatus,
-        updatedAt: Date.now(),
+      await ctx.db.patch(args.id, {
+        stage: args.stage,
+        finalizedDate: isFinalizing
+          ? new Date().toISOString().slice(0, 10)
+          : record.finalizedDate,
       });
-    }
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "exit.advanceStage",
-      recordType: "exitRecords",
-      recordId: args.id,
-      timestamp: Date.now(),
-      details: { stage: args.stage },
+      if (isFinalizing) {
+        // employmentStatus only has "retired" / "terminated" as exit states;
+        // the exitType itself is the source of truth for the legal grounds.
+        const retirementLike = ["retirement_age", "ill_health", "public_interest"];
+        const newStatus = retirementLike.includes(record.exitType) ? "retired" : "terminated";
+        await ctx.db.patch(record.employeeId, {
+          employmentStatus: newStatus,
+          updatedAt: Date.now(),
+        });
+      }
+
+      return { result: null, details: { fromStage: record.stage, toStage: args.stage } };
     });
   },
 });

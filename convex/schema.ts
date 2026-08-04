@@ -283,7 +283,16 @@ export default defineSchema({
     ipAddress: v.optional(v.string()),
     timestamp: v.number(),
     details: v.optional(v.any()),
-  }).index("by_timestamp", ["timestamp"]),
+    // Optional so pre-existing rows (written before this field existed) are
+    // still valid — treat a missing status as "success" when reading.
+    status: v.optional(v.union(v.literal("success"), v.literal("error"))),
+    errorMessage: v.optional(v.string()),
+  })
+    .index("by_timestamp", ["timestamp"])
+    .index("by_status", ["status"])
+    .index("by_action", ["action"])
+    .index("by_recordType", ["recordType"])
+    .index("by_userId", ["userId"]),
 
   notifications: defineTable({
     userId: v.id("users"),

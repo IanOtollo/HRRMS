@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireRole } from "./lib/rbac";
+import { audited } from "./lib/audit";
 
 const DEFAULT_ANNUAL_BALANCE = 30;
 const DEFAULT_SICK_BALANCE = 14;
@@ -82,79 +83,66 @@ export const apply = mutation({
     endDate: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "leave.apply", recordType: "leaveRecords" }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const employee = await ctx.db.get(args.employeeId);
-    if (!employee) throw new ConvexError("Employee not found");
+      const employee = await ctx.db.get(args.employeeId);
+      if (!employee) throw new ConvexError("Employee not found");
 
-    const daysCount = daysBetween(args.startDate, args.endDate);
+      const daysCount = daysBetween(args.startDate, args.endDate);
 
-    const id = await ctx.db.insert("leaveRecords", {
-      employeeId: args.employeeId,
-      leaveType: args.leaveType,
-      startDate: args.startDate,
-      endDate: args.endDate,
-      daysCount,
-      status: "pending",
-      documentIds: [],
+      const id = await ctx.db.insert("leaveRecords", {
+        employeeId: args.employeeId,
+        leaveType: args.leaveType,
+        startDate: args.startDate,
+        endDate: args.endDate,
+        daysCount,
+        status: "pending",
+        documentIds: [],
+      });
+
+      return { result: id, recordId: id, details: { employeeId: args.employeeId, leaveType: args.leaveType, daysCount } };
     });
-
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "leave.apply",
-      recordType: "leaveRecords",
-      recordId: id,
-      timestamp: Date.now(),
-      details: { employeeId: args.employeeId, leaveType: args.leaveType, daysCount },
-    });
-
-    return id;
   },
 });
 
 export const approve = mutation({
   args: { id: v.id("leaveRecords") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+    return audited(ctx, { action: "leave.approve", recordType: "leaveRecords", recordId: args.id }, async () => {
+      const user = await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const record = await ctx.db.get(args.id);
-    if (!record) throw new ConvexError("Leave record not found");
-    if (record.status !== "pending") {
-      throw new ConvexError("Only pending leave applications can be approved");
-    }
+      const record = await ctx.db.get(args.id);
+      if (!record) throw new ConvexError("Leave record not found");
+      if (record.status !== "pending") {
+        throw new ConvexError("Only pending leave applications can be approved");
+      }
 
-    await ctx.db.patch(args.id, { status: "approved", approvedBy: user._id });
+      await ctx.db.patch(args.id, { status: "approved", approvedBy: user._id });
 
-    const year = new Date(record.startDate).getFullYear();
-    const existing = await ctx.db
-      .query("leaveBalances")
-      .withIndex("by_employee_year", (q) =>
-        q.eq("employeeId", record.employeeId).eq("year", year)
-      )
-      .unique();
+      const year = new Date(record.startDate).getFullYear();
+      const existing = await ctx.db
+        .query("leaveBalances")
+        .withIndex("by_employee_year", (q) =>
+          q.eq("employeeId", record.employeeId).eq("year", year)
+        )
+        .unique();
 
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        daysTakenYtd: existing.daysTakenYtd + record.daysCount,
-      });
-    } else {
-      await ctx.db.insert("leaveBalances", {
-        employeeId: record.employeeId,
-        year,
-        annualBalance: DEFAULT_ANNUAL_BALANCE,
-        sickBalance: DEFAULT_SICK_BALANCE,
-        daysTakenYtd: record.daysCount,
-      });
-    }
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          daysTakenYtd: existing.daysTakenYtd + record.daysCount,
+        });
+      } else {
+        await ctx.db.insert("leaveBalances", {
+          employeeId: record.employeeId,
+          year,
+          annualBalance: DEFAULT_ANNUAL_BALANCE,
+          sickBalance: DEFAULT_SICK_BALANCE,
+          daysTakenYtd: record.daysCount,
+        });
+      }
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "leave.approve",
-      recordType: "leaveRecords",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null };
     });
   },
 });
@@ -162,23 +150,18 @@ export const approve = mutation({
 export const reject = mutation({
   args: { id: v.id("leaveRecords") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+    return audited(ctx, { action: "leave.reject", recordType: "leaveRecords", recordId: args.id }, async () => {
+      const user = await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const record = await ctx.db.get(args.id);
-    if (!record) throw new ConvexError("Leave record not found");
-    if (record.status !== "pending") {
-      throw new ConvexError("Only pending leave applications can be rejected");
-    }
+      const record = await ctx.db.get(args.id);
+      if (!record) throw new ConvexError("Leave record not found");
+      if (record.status !== "pending") {
+        throw new ConvexError("Only pending leave applications can be rejected");
+      }
 
-    await ctx.db.patch(args.id, { status: "rejected", approvedBy: user._id });
+      await ctx.db.patch(args.id, { status: "rejected", approvedBy: user._id });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "leave.reject",
-      recordType: "leaveRecords",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null };
     });
   },
 });

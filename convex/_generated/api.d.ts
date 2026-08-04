@@ -20,6 +20,7 @@ import type * as employees from "../employees.js";
 import type * as exitRecords from "../exitRecords.js";
 import type * as http from "../http.js";
 import type * as leaveRecords from "../leaveRecords.js";
+import type * as lib_audit from "../lib/audit.js";
 import type * as lib_rbac from "../lib/rbac.js";
 import type * as notifications from "../notifications.js";
 import type * as otp from "../otp.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   exitRecords: typeof exitRecords;
   http: typeof http;
   leaveRecords: typeof leaveRecords;
+  "lib/audit": typeof lib_audit;
   "lib/rbac": typeof lib_rbac;
   notifications: typeof notifications;
   otp: typeof otp;

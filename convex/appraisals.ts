@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireRole } from "./lib/rbac";
+import { audited } from "./lib/audit";
 
 export const listByCycle = query({
   args: { cycleLabel: v.optional(v.string()) },
@@ -62,58 +63,51 @@ export const initiateCycle = mutation({
     departmentId: v.optional(v.id("departments")),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+    return audited(ctx, { action: "appraisal.initiateCycle", recordType: "appraisals" }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const alreadyRun = await ctx.db
-      .query("appraisals")
-      .filter((q) => q.eq(q.field("financialYear"), args.financialYear))
-      .first();
-    if (alreadyRun) {
-      throw new ConvexError(`An appraisal cycle for FY ${args.financialYear} has already been initiated — only one cycle is allowed per financial year`);
-    }
-
-    let employees;
-    if (args.departmentId) {
-      employees = await ctx.db
-        .query("employees")
-        .withIndex("by_department", (q) => q.eq("departmentId", args.departmentId!))
-        .collect();
-    } else {
-      employees = await ctx.db.query("employees").collect();
-    }
-
-    let created = 0;
-    for (const emp of employees) {
-      if (emp.employmentStatus === "retired" || emp.employmentStatus === "terminated") continue;
-
-      const existing = await ctx.db
+      const alreadyRun = await ctx.db
         .query("appraisals")
-        .withIndex("by_employee", (q) => q.eq("employeeId", emp._id))
-        .filter((q) => q.eq(q.field("cycleLabel"), args.cycleLabel))
+        .filter((q) => q.eq(q.field("financialYear"), args.financialYear))
         .first();
-
-      if (!existing) {
-        await ctx.db.insert("appraisals", {
-          employeeId: emp._id,
-          cycleLabel: args.cycleLabel,
-          financialYear: args.financialYear,
-          status: "pending",
-          submittedAt: Date.now(),
-        });
-        created++;
+      if (alreadyRun) {
+        throw new ConvexError(`An appraisal cycle for FY ${args.financialYear} has already been initiated — only one cycle is allowed per financial year`);
       }
-    }
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.initiateCycle",
-      recordType: "appraisals",
-      timestamp: Date.now(),
-      details: { cycleLabel: args.cycleLabel, financialYear: args.financialYear, created },
+      let employees;
+      if (args.departmentId) {
+        employees = await ctx.db
+          .query("employees")
+          .withIndex("by_department", (q) => q.eq("departmentId", args.departmentId!))
+          .collect();
+      } else {
+        employees = await ctx.db.query("employees").collect();
+      }
+
+      let created = 0;
+      for (const emp of employees) {
+        if (emp.employmentStatus === "retired" || emp.employmentStatus === "terminated") continue;
+
+        const existing = await ctx.db
+          .query("appraisals")
+          .withIndex("by_employee", (q) => q.eq("employeeId", emp._id))
+          .filter((q) => q.eq(q.field("cycleLabel"), args.cycleLabel))
+          .first();
+
+        if (!existing) {
+          await ctx.db.insert("appraisals", {
+            employeeId: emp._id,
+            cycleLabel: args.cycleLabel,
+            financialYear: args.financialYear,
+            status: "pending",
+            submittedAt: Date.now(),
+          });
+          created++;
+        }
+      }
+
+      return { result: { created }, details: { cycleLabel: args.cycleLabel, financialYear: args.financialYear, created } };
     });
-
-    return { created };
   },
 });
 
@@ -122,23 +116,18 @@ export const initiateCycle = mutation({
 export const markSubmitted = mutation({
   args: { id: v.id("appraisals") },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "appraisal.markSubmitted", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
-    if (appraisal.status !== "pending") {
-      throw new ConvexError("Only a pending appraisal can be submitted for review");
-    }
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
+      if (appraisal.status !== "pending") {
+        throw new ConvexError("Only a pending appraisal can be submitted for review");
+      }
 
-    await ctx.db.patch(args.id, { status: "submitted", submittedAt: Date.now() });
+      await ctx.db.patch(args.id, { status: "submitted", submittedAt: Date.now() });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.markSubmitted",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null, details: { fromStatus: appraisal.status, toStatus: "submitted" } };
     });
   },
 });
@@ -150,20 +139,15 @@ export const saveComments = mutation({
     comments: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "appraisal.saveComments", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
 
-    await ctx.db.patch(args.id, { comments: args.comments });
+      await ctx.db.patch(args.id, { comments: args.comments });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.saveComments",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null, details: { field: "comments" } };
     });
   },
 });
@@ -180,23 +164,18 @@ export const saveTargets = mutation({
     additionalAssignments: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "appraisal.saveTargets", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
 
-    await ctx.db.patch(args.id, {
-      targets: args.targets,
-      additionalAssignments: args.additionalAssignments,
-    });
+      await ctx.db.patch(args.id, {
+        targets: args.targets,
+        additionalAssignments: args.additionalAssignments,
+      });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.saveTargets",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null, details: { field: "targets", count: args.targets.length } };
     });
   },
 });
@@ -216,23 +195,18 @@ export const saveWorkPlan = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "appraisal.saveWorkPlan", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
 
-    await ctx.db.patch(args.id, {
-      workPlanPeriod: args.workPlanPeriod,
-      workPlan: args.workPlan,
-    });
+      await ctx.db.patch(args.id, {
+        workPlanPeriod: args.workPlanPeriod,
+        workPlan: args.workPlan,
+      });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.saveWorkPlan",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return { result: null, details: { field: "workPlan", period: args.workPlanPeriod } };
     });
   },
 });
@@ -245,23 +219,21 @@ export const saveRecommendation = mutation({
     mpmcRemarks: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+    return audited(ctx, { action: "appraisal.saveRecommendation", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
 
-    await ctx.db.patch(args.id, {
-      mpmcRecommendation: args.mpmcRecommendation,
-      mpmcRemarks: args.mpmcRemarks,
-    });
+      await ctx.db.patch(args.id, {
+        mpmcRecommendation: args.mpmcRecommendation,
+        mpmcRemarks: args.mpmcRemarks,
+      });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.saveRecommendation",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
+      return {
+        result: null,
+        details: { fromRecommendation: appraisal.mpmcRecommendation, toRecommendation: args.mpmcRecommendation },
+      };
     });
   },
 });
@@ -272,25 +244,19 @@ export const submitScore = mutation({
     score: v.number(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+    return audited(ctx, { action: "appraisal.submitScore", recordType: "appraisals", recordId: args.id }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
 
-    const appraisal = await ctx.db.get(args.id);
-    if (!appraisal) throw new ConvexError("Appraisal not found");
+      const appraisal = await ctx.db.get(args.id);
+      if (!appraisal) throw new ConvexError("Appraisal not found");
 
-    await ctx.db.patch(args.id, {
-      score: args.score,
-      status: "completed",
-      submittedAt: Date.now(),
-    });
+      await ctx.db.patch(args.id, {
+        score: args.score,
+        status: "completed",
+        submittedAt: Date.now(),
+      });
 
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "appraisal.submitScore",
-      recordType: "appraisals",
-      recordId: args.id,
-      timestamp: Date.now(),
-      details: { score: args.score },
+      return { result: null, details: { fromScore: appraisal.score, toScore: args.score } };
     });
   },
 });

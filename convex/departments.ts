@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole } from "./lib/rbac";
+import { audited } from "./lib/audit";
 
 export const list = query({
   args: {},
@@ -21,23 +22,15 @@ export const create = mutation({
     code: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, ["super_admin", "hr_director"]);
+    return audited(ctx, { action: "department.create", recordType: "departments" }, async () => {
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const id = await ctx.db.insert("departments", {
-      name: args.name,
-      code: args.code,
+      const id = await ctx.db.insert("departments", {
+        name: args.name,
+        code: args.code,
+      });
+
+      return { result: id, recordId: id, details: { name: args.name, code: args.code } };
     });
-
-    await ctx.db.insert("auditLog", {
-      userId: user._id,
-      userName: user.name ?? "Unknown",
-      action: "department.create",
-      recordType: "departments",
-      recordId: id,
-      timestamp: Date.now(),
-      details: { name: args.name, code: args.code },
-    });
-
-    return id;
   },
 });
