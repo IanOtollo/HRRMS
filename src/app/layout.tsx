@@ -9,7 +9,10 @@ const sourceSerif = Source_Serif_4({ subsets: ["latin"], variable: "--font-sourc
 const ibmPlexMono = IBM_Plex_Mono({ weight: ["400", "500"], subsets: ["latin"], variable: "--font-ibm-plex-mono" });
 
 export const metadata: Metadata = {
-  title: "Busia County HRRMS",
+  title: {
+    default: "Busia County HRRMS",
+    template: "%s | Busia County HRRMS",
+  },
   description: "HR Employee Master Record System",
 };
 
