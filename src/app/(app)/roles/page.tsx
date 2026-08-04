@@ -12,11 +12,13 @@ import ErrorState from "@/components/ErrorState";
 import Select from "@/components/Select";
 import EmployeePicker from "@/components/EmployeePicker";
 
+// Department Viewer is intentionally left out here — no longer offered when
+// assigning a role, though the label/badge maps below keep it renderable
+// for any existing user who already holds it.
 const ROLE_OPTIONS = Object.entries({
   super_admin: "Super Administrator",
   hr_director: "HR Director",
   records_officer: "Records Officer",
-  department_viewer: "Department Viewer",
 }).map(([value, label]) => ({ value, label }));
 
 const ROLE_LABELS: Record<string, string> = {
