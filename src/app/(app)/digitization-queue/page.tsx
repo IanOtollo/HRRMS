@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef } from "react";
-import { FileDigit, Folder, ChevronDown, Plus, X, UploadCloud, CheckCircle2, Camera, Eye, Trash2 } from "lucide-react";
+import { FileDigit, Folder, ChevronDown, Plus, X, UploadCloud, CheckCircle2, Camera, Eye, Trash2, ScanLine } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -9,6 +9,7 @@ import { Doc } from "../../../../convex/_generated/dataModel";
 import EmployeePicker from "@/components/EmployeePicker";
 import { ALL_DOCUMENT_CATEGORIES, categoryName, SINGLE_UPLOAD_CATEGORIES } from "@/lib/documentCategories";
 import Select from "@/components/Select";
+import DocumentScanner from "@/components/DocumentScanner";
 
 function PendingDocRow({
   doc,
@@ -72,6 +73,7 @@ function PendingDocRow({
 
 export default function DigitizationPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const pendingDocs = useQuery(api.documents.listPending) || [];
   const currentUser = useQuery(api.users.me);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
@@ -171,13 +173,23 @@ export default function DigitizationPage() {
           <h1 className="text-xl font-bold text-[#202b5d]">Documents</h1>
           <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mt-1">Digitization & Verification Queue</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="h-8 px-3 text-[12px] font-bold bg-[#202b5d] text-white rounded hover:bg-[#161f47] flex items-center transition-colors shadow-sm"
-        >
-          <Plus size={14} className="mr-2" /> Upload Document
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="h-8 px-3 text-[12px] font-bold text-county-blue bg-white border border-county-blue/30 rounded hover:bg-slate-50 flex items-center transition-colors shadow-sm"
+          >
+            <ScanLine size={14} className="mr-2" /> Scan Document
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="h-8 px-3 text-[12px] font-bold bg-[#202b5d] text-white rounded hover:bg-[#161f47] flex items-center transition-colors shadow-sm"
+          >
+            <Plus size={14} className="mr-2" /> Upload Document
+          </button>
+        </div>
       </div>
+
+      <DocumentScanner open={isScannerOpen} onClose={() => setIsScannerOpen(false)} />
 
       {employeeFolders.length === 0 ? (
         <div className="bg-white border border-paper-200 shadow-sm rounded-xl px-4 py-12 text-center text-slate-400">
