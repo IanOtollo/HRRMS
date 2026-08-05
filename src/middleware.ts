@@ -15,7 +15,7 @@ const isLoginPage = createRouteMatcher(["/login"]);
 const isPublicPage = createRouteMatcher(["/login", "/support/new"]);
 // Reachable even while the site is blocked — ICT Support's own working area,
 // the public support/ticket surface, the maintenance page itself, and /login
-// (without it, whoever blocked the site gets logged out — 3-minute idle
+// (without it, whoever blocked the site gets logged out — 6-minute idle
 // timeout included — and can never sign back in to lift the block).
 const isIctExempt = createRouteMatcher(["/ict", "/ict/(.*)", "/support", "/support/(.*)", "/maintenance", "/login"]);
 

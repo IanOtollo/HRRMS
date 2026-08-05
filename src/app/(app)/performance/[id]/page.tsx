@@ -571,7 +571,7 @@ function AppraisalEditor({
           className="bg-white rounded-xl border border-paper-200 shadow-sm p-6"
         >
           <h2 className="text-[14px] font-bold text-[#202b5d] flex items-center gap-2 mb-3">
-            <Award size={16} /> Reviewer Comments
+            <Award size={16} /> Supervisor's Comments
           </h2>
           <textarea
             value={comments}
