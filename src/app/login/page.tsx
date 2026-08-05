@@ -1,39 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { LifeBuoy, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuthActions();
+  const convex = useConvex();
   const recordLoginSuccess = useMutation(api.users.recordLoginSuccess);
   const recordLoginFailure = useMutation(api.users.recordLoginFailure);
-  const currentUser = useQuery(api.users.me);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [justSignedIn, setJustSignedIn] = useState(false);
   const [error, setError] = useState("");
-
-  // Route only once currentUser (a live query) actually reflects the new
-  // session, rather than immediately after signIn() resolves — a mutation
-  // fired the instant signIn() returns can still race the server-side auth
-  // context and silently no-op, which a reactive query doesn't.
-  useEffect(() => {
-    if (!justSignedIn || !currentUser) return;
-    // ICT Support goes straight to /ict — /dashboard isn't exempt from the
-    // site block, so routing them through it first would strand them on
-    // the maintenance page whenever they sign back in while blocked.
-    router.push(currentUser.role === "ict_support" ? "/ict" : "/dashboard");
-  }, [justSignedIn, currentUser, router]);
 
   const handleCredentialsSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -43,7 +30,21 @@ export default function LoginPage() {
     try {
       await signIn("password", { email, password, flow: "signIn" });
       recordLoginSuccess({}).catch(() => {});
-      setJustSignedIn(true);
+
+      // The server-side auth context can take a beat to catch up right
+      // after signIn() resolves — a query fired immediately can still see
+      // "not authenticated". Poll a fresh (uncached, unsubscribed) query
+      // until it reflects the new session instead of trusting the first
+      // read, so ICT Support reliably lands on /ict — not /dashboard, which
+      // isn't exempt from the site block and would strand them on the
+      // maintenance page if they sign back in while it's active.
+      let user: { role?: string } | null = null;
+      for (let attempt = 0; attempt < 10 && !user; attempt++) {
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 150));
+        user = await convex.query(api.users.me, {}).catch(() => null);
+      }
+
+      router.push(user?.role === "ict_support" ? "/ict" : "/dashboard");
     } catch (err: any) {
       recordLoginFailure({ email }).catch(() => {});
       setError(
