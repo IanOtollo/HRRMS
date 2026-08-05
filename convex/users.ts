@@ -347,6 +347,8 @@ export const recordLoginSuccess = mutation({
       timestamp: Date.now(),
       status: "success",
     });
+
+    return { role: user.role };
   },
 });
 

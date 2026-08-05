@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { LifeBuoy, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
 export default function LoginPage() {
@@ -15,11 +15,25 @@ export default function LoginPage() {
   const { signIn } = useAuthActions();
   const recordLoginSuccess = useMutation(api.users.recordLoginSuccess);
   const recordLoginFailure = useMutation(api.users.recordLoginFailure);
+  const currentUser = useQuery(api.users.me);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [justSignedIn, setJustSignedIn] = useState(false);
   const [error, setError] = useState("");
+
+  // Route only once currentUser (a live query) actually reflects the new
+  // session, rather than immediately after signIn() resolves — a mutation
+  // fired the instant signIn() returns can still race the server-side auth
+  // context and silently no-op, which a reactive query doesn't.
+  useEffect(() => {
+    if (!justSignedIn || !currentUser) return;
+    // ICT Support goes straight to /ict — /dashboard isn't exempt from the
+    // site block, so routing them through it first would strand them on
+    // the maintenance page whenever they sign back in while blocked.
+    router.push(currentUser.role === "ict_support" ? "/ict" : "/dashboard");
+  }, [justSignedIn, currentUser, router]);
 
   const handleCredentialsSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -28,8 +42,8 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      await recordLoginSuccess({}).catch(() => {});
-      router.push("/dashboard");
+      recordLoginSuccess({}).catch(() => {});
+      setJustSignedIn(true);
     } catch (err: any) {
       recordLoginFailure({ email }).catch(() => {});
       setError(
@@ -38,7 +52,6 @@ export default function LoginPage() {
           ? "Invalid email or password."
           : "Sign in failed. Please try again."
       );
-    } finally {
       setLoading(false);
     }
   };
