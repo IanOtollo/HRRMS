@@ -63,12 +63,15 @@ function ChartCard({
       transition={{ duration: 0.5, ease }}
       className="bg-white border border-paper-200 shadow-sm rounded-xl p-5"
     >
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-[13px] font-bold text-[#202b5d] uppercase tracking-wider flex items-center gap-2">
-          {Icon && <Icon size={14} className="text-slate-400" />}
-          {title}
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h3
+          className="text-[13px] font-bold text-[#202b5d] uppercase tracking-wider flex items-center gap-2 min-w-0 flex-1"
+          title={title}
+        >
+          {Icon && <Icon size={14} className="text-slate-400 shrink-0" />}
+          <span className="truncate">{title}</span>
         </h3>
-        {action}
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </motion.div>
