@@ -187,12 +187,9 @@ const EDITABLE_TEXT_FIELDS = [
   { key: "emailAddress", label: "Email Address" },
   { key: "designation", label: "Designation" },
   { key: "jobGroup", label: "Job Group" },
-  { key: "payrollNumber", label: "Payroll Number" },
   { key: "stationLocation", label: "Station / Location" },
-  { key: "shifNhifNumber", label: "SHIF / NHIF Number" },
+  { key: "shifNhifNumber", label: "SHA Number" },
   { key: "nssfNumber", label: "NSSF Number" },
-  { key: "bankName", label: "Bank Name" },
-  { key: "branchName", label: "Branch Name" },
 ] as const;
 
 const EDITABLE_DATE_FIELDS = [
@@ -200,7 +197,7 @@ const EDITABLE_DATE_FIELDS = [
   { key: "firstAppointmentDate", label: "Date of Appointment" },
 ] as const;
 
-type EditableKey = (typeof EDITABLE_TEXT_FIELDS)[number]["key"] | (typeof EDITABLE_DATE_FIELDS)[number]["key"] | "gender" | "departmentId" | "termsOfService" | "contractEndDate";
+type EditableKey = (typeof EDITABLE_TEXT_FIELDS)[number]["key"] | (typeof EDITABLE_DATE_FIELDS)[number]["key"] | "gender" | "departmentId" | "termsOfService" | "contractEndDate" | "pensionScheme";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -228,13 +225,14 @@ function EditModal({
   const [values, setValues] = useState<Record<EditableKey, string>>(() => {
     const initial: Record<string, string> = {};
     for (const f of EDITABLE_TEXT_FIELDS) {
-      initial[f.key] = f.key === "bankName" ? employee.bankDetails?.bankName ?? "" : f.key === "branchName" ? employee.bankDetails?.branchName ?? "" : employee[f.key] ?? "";
+      initial[f.key] = employee[f.key] ?? "";
     }
     for (const f of EDITABLE_DATE_FIELDS) initial[f.key] = employee[f.key] ?? "";
     initial.gender = employee.gender ?? "";
     initial.departmentId = employee.departmentId ?? "";
     initial.termsOfService = employee.termsOfService ?? "";
     initial.contractEndDate = employee.contractEndDate ?? "";
+    initial.pensionScheme = employee.pensionScheme ?? "";
     return initial as Record<EditableKey, string>;
   });
   const [saving, setSaving] = useState(false);
@@ -274,7 +272,6 @@ function EditModal({
     setError("");
     try {
       for (const field of EDITABLE_TEXT_FIELDS) {
-        if (field.key === "bankName" || field.key === "branchName") continue;
         if (values[field.key] !== (employee[field.key] ?? "")) {
           await updateField({ id: employee._id, field: field.key, value: values[field.key] });
         }
@@ -296,10 +293,8 @@ function EditModal({
       if (isContractOrCasual && values.contractEndDate !== (employee.contractEndDate ?? "")) {
         await updateField({ id: employee._id, field: "contractEndDate", value: values.contractEndDate });
       }
-      const bankName = values.bankName;
-      const branchName = values.branchName;
-      if (bankName !== (employee.bankDetails?.bankName ?? "") || branchName !== (employee.bankDetails?.branchName ?? "")) {
-        await updateField({ id: employee._id, field: "bankDetails", value: { bankName, branchName } });
+      if (values.pensionScheme !== (employee.pensionScheme ?? "")) {
+        await updateField({ id: employee._id, field: "pensionScheme", value: values.pensionScheme });
       }
       onClose();
     } catch (err: any) {
@@ -402,10 +397,6 @@ function EditModal({
                 <input value={values.jobGroup} onChange={(e) => setValue("jobGroup", e.target.value.toUpperCase())} className={inputClass} />
               </div>
               <div>
-                <label className={labelClass}>Payroll Number</label>
-                <input value={values.payrollNumber} onChange={(e) => setValue("payrollNumber", e.target.value)} className={inputClass} />
-              </div>
-              <div>
                 <label className={labelClass}>Terms of Service</label>
                 <Select
                   value={values.termsOfService}
@@ -439,7 +430,7 @@ function EditModal({
             <p className="text-[11px] font-bold text-[#202b5d] uppercase tracking-wider mb-2 pb-1 border-b border-paper-100">Statutory & Financial</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>SHIF / NHIF Number</label>
+                <label className={labelClass}>SHA Number</label>
                 <input value={values.shifNhifNumber} onChange={(e) => setValue("shifNhifNumber", e.target.value)} className={inputClass} />
               </div>
               <div>
@@ -447,12 +438,16 @@ function EditModal({
                 <input value={values.nssfNumber} onChange={(e) => setValue("nssfNumber", e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className={labelClass}>Bank Name</label>
-                <input value={values.bankName} onChange={(e) => setValue("bankName", e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Branch Name</label>
-                <input value={values.branchName} onChange={(e) => setValue("branchName", e.target.value)} className={inputClass} />
+                <label className={labelClass}>Pension Scheme</label>
+                <Select
+                  value={values.pensionScheme}
+                  onChange={(v) => setValue("pensionScheme", v)}
+                  placeholder="Select..."
+                  options={[
+                    { value: "CPS", label: "CPS" },
+                    { value: "LAPFUND", label: "LAPFUND" },
+                  ]}
+                />
               </div>
             </div>
           </div>
@@ -937,8 +932,9 @@ function MasterRecordPageInner({ params }: { params: Promise<{ id: string }> }) 
             {employee.gender && <PrintRow label="Gender" value={employee.gender} />}
             {employee.phoneNumber && <PrintRow label="Phone Number" value={employee.phoneNumber} />}
             {employee.emailAddress && <PrintRow label="Email Address" value={employee.emailAddress} />}
-            {employee.shifNhifNumber && <PrintRow label="SHIF/NHIF Number" value={employee.shifNhifNumber} />}
+            {employee.shifNhifNumber && <PrintRow label="SHA Number" value={employee.shifNhifNumber} />}
             {employee.nssfNumber && <PrintRow label="NSSF Number" value={employee.nssfNumber} />}
+            {employee.pensionScheme && <PrintRow label="Pension Scheme" value={employee.pensionScheme} />}
             {employee.nextOfKin?.map((kin, i) => (
               <PrintRow key={i} label={i === 0 ? "Next of Kin" : ""} value={`${kin.name} (${kin.relationship}) — ${kin.phoneNumber}`} />
             ))}

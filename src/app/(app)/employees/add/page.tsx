@@ -45,7 +45,6 @@ const employeeSchema = z.object({
   departmentId: z.string().min(1, "Required"),
   designation: z.string().min(1, "Required"),
   jobGroup: z.string().optional(),
-  payrollNumber: z.string().min(1, "Required"),
   firstAppointmentDate: z.string().min(1, "Required")
     .refine((val) => val <= todayISO(), "Date of appointment cannot be in the future"),
   termsOfService: z.string().min(1, "Required"),
@@ -55,8 +54,7 @@ const employeeSchema = z.object({
   // Step 3: Statutory
   shifNhifNumber: z.string().min(1, "Required"),
   nssfNumber: z.string().min(1, "Required"),
-  bankName: z.string().min(1, "Required"),
-  branchName: z.string().min(1, "Required"),
+  pensionScheme: z.enum(["CPS", "LAPFUND"], { errorMap: () => ({ message: "Required" }) }),
 }).superRefine((data, ctx) => {
   // Not just "18 today" — the employee must have actually been 18+ on the
   // date they were appointed (matters when back-dating a historical hire).
@@ -162,8 +160,8 @@ export default function AddEmployeePage() {
   const processNextStep = async () => {
     let fieldsToValidate: any[] = [];
     if (currentStep === 1) fieldsToValidate = ['firstName', 'surname', 'pfNumber', 'nationalId', 'dateOfBirth', 'gender', 'phoneNumber', 'emailAddress'];
-    if (currentStep === 2) fieldsToValidate = ['departmentId', 'designation', 'payrollNumber', 'firstAppointmentDate', 'termsOfService', 'stationLocation'];
-    if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'bankName', 'branchName'];
+    if (currentStep === 2) fieldsToValidate = ['departmentId', 'designation', 'firstAppointmentDate', 'termsOfService', 'stationLocation'];
+    if (currentStep === 3) fieldsToValidate = ['shifNhifNumber', 'nssfNumber', 'pensionScheme'];
 
     const isStepValid = await trigger(fieldsToValidate as any);
     if (currentStep === 1 && hasDuplicateField) return;
@@ -217,7 +215,6 @@ export default function AddEmployeePage() {
         termsOfService: data.termsOfService,
         firstAppointmentDate: data.firstAppointmentDate,
         retirementDate: retirementDate,
-        payrollNumber: data.payrollNumber,
         dateOfBirth: data.dateOfBirth,
         gender: data.gender as any,
         phoneNumber: data.phoneNumber,
@@ -226,10 +223,7 @@ export default function AddEmployeePage() {
         passportPhotoId: photoStorageId ?? undefined,
         shifNhifNumber: data.shifNhifNumber,
         nssfNumber: data.nssfNumber,
-        bankDetails: {
-          bankName: data.bankName,
-          branchName: data.branchName,
-        },
+        pensionScheme: data.pensionScheme,
         nextOfKin: completeNextOfKin.length > 0 ? completeNextOfKin : undefined,
         contractEndDate: isContractOrCasual ? (data.contractEndDate || undefined) : undefined,
       });
@@ -483,12 +477,6 @@ export default function AddEmployeePage() {
               </div>
 
               <div className="relative">
-                <label className={labelClass}>Payroll Number</label>
-                <input {...register("payrollNumber")} className={inputClass} />
-                {errors.payrollNumber && <p className={errorClass}>{errors.payrollNumber.message}</p>}
-              </div>
-
-              <div className="relative">
                 <label className={labelClass}>Terms of Service</label>
                 <Controller
                   name="termsOfService"
@@ -537,7 +525,7 @@ export default function AddEmployeePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
               
               <div className="relative">
-                <label className={labelClass}>SHIF / NHIF Number</label>
+                <label className={labelClass}>SHA Number</label>
                 <input {...register("shifNhifNumber")} className={inputClass} />
                 {errors.shifNhifNumber && <p className={errorClass}>{errors.shifNhifNumber.message}</p>}
               </div>
@@ -548,22 +536,24 @@ export default function AddEmployeePage() {
                 {errors.nssfNumber && <p className={errorClass}>{errors.nssfNumber.message}</p>}
               </div>
 
-              <div className="col-span-3 border-b border-slate-100 my-1"></div>
-
-              <div className="col-span-3 -mt-2 mb-1">
-                <p className="text-[11px] text-slate-400">Account numbers are managed by the payroll system, not HR — only bank and branch are recorded here.</p>
-              </div>
-
               <div className="relative">
-                <label className={labelClass}>Bank Name</label>
-                <input {...register("bankName")} className={inputClass} />
-                {errors.bankName && <p className={errorClass}>{errors.bankName.message}</p>}
-              </div>
-
-              <div className="relative">
-                <label className={labelClass}>Branch Name</label>
-                <input {...register("branchName")} className={inputClass} />
-                {errors.branchName && <p className={errorClass}>{errors.branchName.message}</p>}
+                <label className={labelClass}>Pension Scheme</label>
+                <Controller
+                  name="pensionScheme"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="Select..."
+                      options={[
+                        { value: "CPS", label: "CPS" },
+                        { value: "LAPFUND", label: "LAPFUND" },
+                      ]}
+                    />
+                  )}
+                />
+                {errors.pensionScheme && <p className={errorClass}>{errors.pensionScheme.message}</p>}
               </div>
 
             </div>

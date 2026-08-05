@@ -76,6 +76,7 @@ export default defineSchema({
     // Statutory Information
     shifNhifNumber: v.optional(v.string()),
     nssfNumber: v.optional(v.string()),
+    pensionScheme: v.optional(v.union(v.literal("CPS"), v.literal("LAPFUND"))),
     bankDetails: v.optional(v.object({
       bankName: v.string(),
       branchName: v.string(),
