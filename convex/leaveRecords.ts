@@ -12,7 +12,6 @@ export const list = query({
     const user = await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -47,7 +46,6 @@ export const getBalance = query({
     await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -84,7 +82,7 @@ export const apply = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "leave.apply", recordType: "leaveRecords" }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const employee = await ctx.db.get(args.employeeId);
       if (!employee) throw new ConvexError("Employee not found");

@@ -21,6 +21,7 @@ import {
   Database,
   User,
   X,
+  LifeBuoy,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -34,6 +35,8 @@ type CurrentUser = {
 const navigationSections = [
   {
     title: "Operations",
+    // ICT Support works entirely from its own /ict area, not the HR shell.
+    hiddenForRoles: ["ict_support"],
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/employees", label: "Employees", icon: Users },
@@ -42,6 +45,9 @@ const navigationSections = [
   },
   {
     title: "Talent & HR",
+    // Records Officer is scoped to Employees + Documents only; ICT Support
+    // works entirely from its own /ict area, not the HR data tabs.
+    hiddenForRoles: ["records_officer", "ict_support"],
     items: [
       { href: "https://uatleave.busiacounty.go.ke/", label: "Leave", icon: CalendarDays, external: true },
       { href: "/performance", label: "Performance", icon: LineChart },
@@ -50,6 +56,7 @@ const navigationSections = [
   },
   {
     title: "Compliance & Exits",
+    hiddenForRoles: ["records_officer", "ict_support"],
     items: [
       { href: "/disciplinary", label: "Disciplinary", icon: Scale },
       { href: "/retirement-exit", label: "Retirement & Exit", icon: DoorOpen },
@@ -63,6 +70,17 @@ const navigationSections = [
       { href: "/roles", label: "Users & Roles", icon: ShieldAlert },
       { href: "/audit-log", label: "Audit Log", icon: Database },
       { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+  {
+    title: "ICT Support",
+    // Only ICT Support sees this — their entire world (tickets, logs, the
+    // site kill-switch), mirroring what "Administration" is for admins.
+    visibleForRoles: ["ict_support"],
+    items: [
+      { href: "/ict", label: "ICT Dashboard", icon: LifeBuoy },
+      { href: "/support", label: "Ticket Queue", icon: LifeBuoy },
+      { href: "/audit-log", label: "Audit Log", icon: Database },
     ],
   },
 ];
@@ -155,6 +173,8 @@ export default function Sidebar({
         <div className="space-y-1">
           {navigationSections.map((section) => {
             if (section.adminOnly && role !== "super_admin" && role !== "hr_director") return null;
+            if ("hiddenForRoles" in section && section.hiddenForRoles?.includes(role)) return null;
+            if ("visibleForRoles" in section && !section.visibleForRoles?.includes(role)) return null;
             const isClosed = closedSections[section.title];
 
             return (
@@ -232,6 +252,33 @@ export default function Sidebar({
           })}
         </div>
       </nav>
+
+      {/* Need Help — submits YOUR OWN ticket, for every role including
+          admins (who'd otherwise land in their own oversight queue via the
+          "Ticket Queue" link above instead of actually asking for help).
+          Not shown to ICT Support itself, since they're the ones who'd
+          receive it. Bordered off from the scrollable nav above so it reads
+          as a pinned footer, not one more item in the list. */}
+      {role !== "ict_support" && (
+      <div className="px-3 py-2 shrink-0 border-t border-slate-700/50">
+        <Link
+          href="/support/new"
+          onClick={() => onCloseMobile?.()}
+          className="flex items-center h-[32px] w-full relative transition-colors rounded text-slate-300 hover:bg-white/5 hover:text-white group/item"
+        >
+          <div className={`flex justify-center shrink-0 ${collapsed ? "w-full" : "w-[36px]"}`}>
+            <LifeBuoy size={15} className="text-slate-400" />
+          </div>
+          {!collapsed && <span className="text-[13px] truncate pr-2">Need Help?</span>}
+          {collapsed && (
+            <div className="absolute left-[48px] top-1/2 -translate-y-1/2 px-2 py-1.5 bg-[#161f47] text-white text-[11px] font-medium rounded opacity-0 invisible group-hover/item:opacity-100 group-hover/item:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none flex items-center">
+              <div className="absolute top-1/2 -translate-y-1/2 -left-[4px] w-0 h-0 border-t-[4px] border-t-transparent border-r-[4px] border-r-slate-700 border-b-[4px] border-b-transparent"></div>
+              Need Help?
+            </div>
+          )}
+        </Link>
+      </div>
+      )}
 
       {/* User Block */}
       <div className="h-[60px] border-t border-slate-700/50 relative flex items-center shrink-0 bg-black/20">

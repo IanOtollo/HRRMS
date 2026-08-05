@@ -5,24 +5,10 @@ import { audited } from "./lib/audit";
 
 export const list = query({
   handler: async (ctx) => {
-    // Department viewer has NO access to disciplinary records
-    const user = await requireRole(ctx, [
-      "super_admin",
-      "hr_director",
-      "records_officer",
-    ]);
+    // Department viewer and Records Officer have NO access to disciplinary records
+    await requireRole(ctx, ["super_admin", "hr_director"]);
 
-    const records = await ctx.db.query("disciplinaryRecords").collect();
-
-    // Records officer cannot see restricted notes
-    if (user.role === "records_officer") {
-      return records.map((r) => {
-        const { restrictedNotes, ...rest } = r;
-        return rest;
-      });
-    }
-
-    return records;
+    return await ctx.db.query("disciplinaryRecords").collect();
   },
 });
 
@@ -64,16 +50,12 @@ export const openCase = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "disciplinary.openCase", recordType: "disciplinaryRecords" }, async () => {
-      const user = await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const employee = await ctx.db.get(args.employeeId);
       if (!employee) throw new ConvexError("Employee not found");
       if (employee.employmentStatus === "retired" || employee.employmentStatus === "terminated") {
         throw new ConvexError(`${employee.fullName} has already exited service and cannot have a new disciplinary case opened`);
-      }
-
-      if (args.restrictedNotes && user.role === "records_officer") {
-        throw new ConvexError("Records Officer cannot record confidential notes");
       }
 
       const caseReference = `DISC-${new Date().getFullYear()}-${Math.floor(Date.now() / 1000).toString().slice(-6)}`;
@@ -130,7 +112,7 @@ export const advanceStage = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "disciplinary.advanceStage", recordType: "disciplinaryRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Disciplinary record not found");

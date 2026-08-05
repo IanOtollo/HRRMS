@@ -9,7 +9,6 @@ export const listByCycle = query({
     const user = await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -40,7 +39,6 @@ export const get = query({
     const user = await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -117,7 +115,7 @@ export const markSubmitted = mutation({
   args: { id: v.id("appraisals") },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "appraisal.markSubmitted", recordType: "appraisals", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const appraisal = await ctx.db.get(args.id);
       if (!appraisal) throw new ConvexError("Appraisal not found");
@@ -140,7 +138,7 @@ export const saveComments = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "appraisal.saveComments", recordType: "appraisals", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const appraisal = await ctx.db.get(args.id);
       if (!appraisal) throw new ConvexError("Appraisal not found");
@@ -165,7 +163,7 @@ export const saveTargets = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "appraisal.saveTargets", recordType: "appraisals", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const appraisal = await ctx.db.get(args.id);
       if (!appraisal) throw new ConvexError("Appraisal not found");
@@ -196,7 +194,7 @@ export const saveWorkPlan = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "appraisal.saveWorkPlan", recordType: "appraisals", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const appraisal = await ctx.db.get(args.id);
       if (!appraisal) throw new ConvexError("Appraisal not found");
@@ -245,7 +243,7 @@ export const submitScore = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "appraisal.submitScore", recordType: "appraisals", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const appraisal = await ctx.db.get(args.id);
       if (!appraisal) throw new ConvexError("Appraisal not found");

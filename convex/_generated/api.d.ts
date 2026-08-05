@@ -28,6 +28,7 @@ import type * as otpNode from "../otpNode.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as settings from "../settings.js";
+import type * as tickets from "../tickets.js";
 import type * as trainingRecords from "../trainingRecords.js";
 import type * as users from "../users.js";
 
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   seed: typeof seed;
   settings: typeof settings;
+  tickets: typeof tickets;
   trainingRecords: typeof trainingRecords;
   users: typeof users;
 }>;

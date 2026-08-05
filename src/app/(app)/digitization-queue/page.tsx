@@ -271,16 +271,16 @@ export default function DigitizationPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm"
+            className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm p-4"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-md shadow-xl w-[500px] overflow-hidden border border-slate-200"
+              className="bg-white rounded-md shadow-xl w-[500px] max-h-[85vh] overflow-hidden border border-slate-200 flex flex-col"
             >
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
                 <h2 className="text-[14px] font-bold text-[#202b5d] flex items-center">
                   <UploadCloud size={16} className="mr-2" /> Upload Document
                 </h2>
@@ -288,7 +288,7 @@ export default function DigitizationPage() {
                   <X size={16} />
                 </button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto">
                 {actionError && (
                   <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded p-2">{actionError}</div>
                 )}
@@ -352,7 +352,7 @@ export default function DigitizationPage() {
                   )}
                 </div>
               </div>
-              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">
+              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2 shrink-0">
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-4 h-8 text-[12px] font-bold text-slate-600 hover:bg-slate-200 rounded transition-colors">Cancel</button>
                 <button
                   onClick={handleUpload}

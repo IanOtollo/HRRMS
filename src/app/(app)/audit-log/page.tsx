@@ -81,7 +81,11 @@ function downloadCsv(rows: any[]) {
 
 export default function AuditLogPage() {
   const currentUser = useQuery(api.users.me);
-  const isAdmin = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
+  const canView =
+    currentUser?.role === "super_admin" || currentUser?.role === "hr_director" || currentUser?.role === "ict_support";
+  // The full user list (for the "filter by user" dropdown) stays admin-only
+  // — ICT Support can view the log itself without the user-management list.
+  const canListUsers = currentUser?.role === "super_admin" || currentUser?.role === "hr_director";
 
   const [searchText, setSearchText] = useState("");
   const [status, setStatus] = useState("");
@@ -91,10 +95,10 @@ export default function AuditLogPage() {
   const [dateTo, setDateTo] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const users = useQuery(api.users.list, isAdmin ? {} : "skip") || [];
-  const stats = useQuery(api.auditLog.stats, isAdmin ? {} : "skip");
+  const users = useQuery(api.users.list, canListUsers ? {} : "skip") || [];
+  const stats = useQuery(api.auditLog.stats, canView ? {} : "skip");
 
-  const queryArgs = isAdmin
+  const queryArgs = canView
     ? {
         status: status ? (status as "success" | "error") : undefined,
         recordType: recordType || undefined,
@@ -111,14 +115,14 @@ export default function AuditLogPage() {
 
   if (currentUser === undefined) return null;
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <div className="p-4 md:p-6">
         <ErrorState
           code={403}
           icon={ShieldOff}
           title="Access Restricted"
-          message="The audit log is only available to Super Administrators and HR Directors."
+          message="The audit log is only available to Super Administrators, HR Directors, and ICT Support."
         />
       </div>
     );

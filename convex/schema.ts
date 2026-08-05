@@ -6,7 +6,8 @@ export const userRoleValidator = v.union(
   v.literal("super_admin"),
   v.literal("hr_director"),
   v.literal("records_officer"),
-  v.literal("department_viewer")
+  v.literal("department_viewer"),
+  v.literal("ict_support")
 );
 
 export default defineSchema({
@@ -30,6 +31,10 @@ export default defineSchema({
     isActive: v.optional(v.boolean()),
     createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
+    // Set when ICT Support force-resets this account's password — forces a
+    // "set new password" screen (no current-password field) on next login,
+    // cleared once completed.
+    mustChangePassword: v.optional(v.boolean()),
   }).index("email", ["email"]),
 
   departments: defineTable({
@@ -314,6 +319,70 @@ export default defineSchema({
     allowedIpRanges: v.optional(v.string()),
     updatedBy: v.optional(v.id("users")),
     updatedAt: v.number(),
+
+    // Site-wide maintenance kill-switch — ICT Support exclusive, no admin
+    // override by design. Never returned by any client-readable query
+    // except the narrow public getSiteBlockStatus projection.
+    siteBlocked: v.optional(v.boolean()),
+    siteBlockedReason: v.optional(v.string()),
+    siteBlockedAt: v.optional(v.number()),
+    siteBlockedBy: v.optional(v.id("users")),
+
+    // 4-digit entry PIN for /ict — a UX friction layer on top of the real
+    // requireRole(ict_support) check on every actual mutation, not a
+    // replacement for it. Stored as-is (not hashed): low-stakes, never
+    // exposed to any client-readable query.
+    ictPin: v.optional(v.string()),
   }),
+
+  supportTickets: defineTable({
+    type: v.union(
+      v.literal("inquiry"),
+      v.literal("problem"),
+      v.literal("suggestion"),
+      v.literal("password_reset")
+    ),
+    subject: v.string(),
+    description: v.string(),
+    status: v.union(
+      v.literal("open"),
+      v.literal("in_progress"),
+      v.literal("resolved"),
+      v.literal("closed")
+    ),
+    // Set when submitted while logged in — undefined for anonymous
+    // submissions (most commonly password_reset, submitted by someone who
+    // by definition can't sign in).
+    submitterUserId: v.optional(v.id("users")),
+    submitterName: v.string(),
+    submitterEmail: v.string(),
+    submitterPhone: v.optional(v.string()),
+    // How the submitter wants to be reached back — not applicable to
+    // password_reset, which always goes through chat/direct contact by ICT.
+    preferredContact: v.optional(v.union(
+      v.literal("in_app"),
+      v.literal("whatsapp"),
+      v.literal("sms"),
+      v.literal("phone_call")
+    )),
+    assignedTo: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_submitterUserId", ["submitterUserId"]),
+
+  // The conversation thread for a ticket. Only meaningful for tickets
+  // submitted while logged in — an anonymous submitter has no session to
+  // read replies through, so those are resolved directly (phone/in-person)
+  // rather than via ongoing chat.
+  ticketMessages: defineTable({
+    ticketId: v.id("supportTickets"),
+    senderUserId: v.optional(v.id("users")),
+    senderName: v.string(),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index("by_ticket", ["ticketId"]),
 
 });

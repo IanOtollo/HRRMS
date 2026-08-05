@@ -126,7 +126,7 @@ export default function DocumentScanner({ open, onClose }: { open: boolean; onCl
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm"
+          className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 8 }}

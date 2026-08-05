@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const pendingDocs = useQuery(api.documents.listPending) || [];
   const disciplinaryRecords = useQuery(
     api.disciplinaryRecords.list,
-    currentUser?.role && currentUser.role !== "department_viewer" ? {} : "skip"
+    currentUser?.role === "super_admin" || currentUser?.role === "hr_director" ? {} : "skip"
   ) || [];
 
   const stats = {

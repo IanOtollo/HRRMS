@@ -1,4 +1,4 @@
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { createAccount, modifyAccountCredentials } from "@convex-dev/auth/server";
@@ -37,6 +37,21 @@ export const list = query({
         createdAt: u.createdAt,
         lastLoginAt: u.lastLoginAt,
       }));
+  },
+});
+
+// Lets ICT Support resolve a password-reset ticket's email to an account
+// without exposing the full user-management list/roles page to them.
+export const lookupByEmail = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["super_admin", "hr_director", "ict_support"]);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email.trim()))
+      .unique();
+    if (!user || !user.role) return null;
+    return { _id: user._id, name: user.name, email: user.email, role: user.role, isActive: user.isActive ?? true };
   },
 });
 
@@ -148,6 +163,112 @@ export const changePassword = action({
   },
 });
 
+// ICT Support (or a director) sets a brand-new password for a locked-out
+// user directly — no email infra exists in this app, so the temp password
+// is relayed out-of-band (phone/in-person) by whoever runs this. The
+// affected account is forced to set its own password on next login.
+export const forcePasswordReset = action({
+  args: {
+    userId: v.id("users"),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    let caller: FunctionReturnType<typeof api.users.me> = null;
+    try {
+      caller = await ctx.runQuery(api.users.me, {});
+      if (
+        !caller ||
+        (caller.role !== "super_admin" && caller.role !== "hr_director" && caller.role !== "ict_support")
+      ) {
+        throw new ConvexError("Access denied: insufficient permissions");
+      }
+
+      if (args.newPassword.length < 8) {
+        throw new ConvexError("New password must be at least 8 characters");
+      }
+
+      const target = await ctx.runQuery(internal.users.getUserById, { id: args.userId });
+      if (!target || !target.email) {
+        throw new ConvexError("User not found");
+      }
+
+      await modifyAccountCredentials(ctx, {
+        provider: "password",
+        account: { id: target.email, secret: args.newPassword },
+      });
+
+      await ctx.runMutation(internal.users.setMustChangePassword, { userId: args.userId, value: true });
+
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller._id,
+        userName: caller.name ?? "Unknown",
+        action: "user.forcePasswordReset",
+        recordId: args.userId,
+        details: { targetEmail: target.email },
+        status: "success",
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller?._id,
+        userName: caller?.name ?? "Unauthenticated",
+        action: "user.forcePasswordReset",
+        recordId: args.userId,
+        status: "error",
+        errorMessage: toErrorMessage(err),
+      });
+      throw err;
+    }
+  },
+});
+
+// Called by a user who was force-reset — they're authenticated (they signed
+// in with the temp password ICT gave them), so unlike changePassword this
+// intentionally skips the current-password check: it was forgotten, that's
+// the whole reason this flow exists.
+export const completeForcedPasswordChange = action({
+  args: {
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    let caller: FunctionReturnType<typeof api.users.me> = null;
+    try {
+      caller = await ctx.runQuery(api.users.me, {});
+      if (!caller || !caller.email) {
+        throw new ConvexError("Not authenticated");
+      }
+      if (!caller.mustChangePassword) {
+        throw new ConvexError("No forced password change is pending for this account");
+      }
+      if (args.newPassword.length < 8) {
+        throw new ConvexError("New password must be at least 8 characters");
+      }
+
+      await modifyAccountCredentials(ctx, {
+        provider: "password",
+        account: { id: caller.email, secret: args.newPassword },
+      });
+
+      await ctx.runMutation(internal.users.setMustChangePassword, { userId: caller._id, value: false });
+
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller._id,
+        userName: caller.name ?? "Unknown",
+        action: "user.completeForcedPasswordChange",
+        status: "success",
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.users.logAudit, {
+        userId: caller?._id,
+        userName: caller?.name ?? "Unauthenticated",
+        action: "user.completeForcedPasswordChange",
+        status: "error",
+        errorMessage: toErrorMessage(err),
+      });
+      throw err;
+    }
+  },
+});
+
 export const updateRole = mutation({
   args: {
     id: v.id("users"),
@@ -159,6 +280,10 @@ export const updateRole = mutation({
       await requireRole(ctx, ["super_admin"]);
       const target = await ctx.db.get(args.id);
       if (!target) throw new ConvexError("User not found");
+
+      if (target.role === "ict_support" && args.role !== "ict_support") {
+        throw new ConvexError("ICT Support's role cannot be reassigned");
+      }
 
       await ctx.db.patch(args.id, {
         role: args.role,
@@ -188,6 +313,10 @@ export const setActive = mutation({
 
         const target = await ctx.db.get(args.id);
         if (!target) throw new ConvexError("User not found");
+
+        if (target.role === "ict_support" && !args.isActive) {
+          throw new ConvexError("ICT Support's account cannot be deactivated");
+        }
 
         await ctx.db.patch(args.id, { isActive: args.isActive });
 
@@ -268,6 +397,20 @@ export const recordLogout = mutation({
       timestamp: Date.now(),
       status: "success",
     });
+  },
+});
+
+export const getUserById = internalQuery({
+  args: { id: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const setMustChangePassword = internalMutation({
+  args: { userId: v.id("users"), value: v.boolean() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { mustChangePassword: args.value });
   },
 });
 

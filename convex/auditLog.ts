@@ -16,7 +16,7 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     // Only super admin and HR director can view audit logs
-    await requireRole(ctx, ["super_admin", "hr_director"]);
+    await requireRole(ctx, ["super_admin", "hr_director", "ict_support"]);
 
     const result = await ctx.db
       .query("auditLog")
@@ -65,7 +65,7 @@ export const list = query({
 export const stats = query({
   args: {},
   handler: async (ctx) => {
-    await requireRole(ctx, ["super_admin", "hr_director"]);
+    await requireRole(ctx, ["super_admin", "hr_director", "ict_support"]);
 
     const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const startOfToday = new Date().setHours(0, 0, 0, 0);

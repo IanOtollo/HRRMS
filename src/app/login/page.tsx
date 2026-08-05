@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import { LifeBuoy, Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -97,7 +98,15 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-text-primary mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-semibold text-text-primary">Password</label>
+                <Link
+                  href={`/support/new?type=password_reset${email ? `&email=${encodeURIComponent(email)}` : ""}`}
+                  className="text-[12px] font-semibold text-county-blue hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
                 <input
@@ -130,10 +139,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-text-secondary">
-            <ShieldCheck size={13} />
-            <span>Accounts are provisioned by your Records Officer or HR Director</span>
-          </div>
+          <Link
+            href="/support/new"
+            className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-text-secondary hover:text-county-blue transition-colors"
+          >
+            <LifeBuoy size={13} />
+            <span>Need help? Contact ICT Support</span>
+          </Link>
         </motion.div>
 
         <p className="mt-8 text-center text-[11px] text-white/40 tracking-wide">

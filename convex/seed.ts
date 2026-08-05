@@ -52,6 +52,56 @@ export const renameUserByEmail = internalMutation({
   },
 });
 
+const RBAC_ROSTER: { email: string; name: string; role: "super_admin" | "ict_support" | "records_officer" }[] = [
+  { email: "director.hr@busiacounty.go.ke", name: "Director of HR", role: "super_admin" },
+  { email: "deputy.hr@busiacounty.go.ke", name: "Deputy Director of HR", role: "super_admin" },
+  { email: "ict.hr@busiacounty.go.ke", name: "ICT Support", role: "ict_support" },
+  { email: "record.hr@busiacounty.go.ke", name: "Records Officer", role: "records_officer" },
+];
+
+// One-time provisioning of the standard RBAC roster (director/deputy HR,
+// ICT Support, Records Officer). Does not touch any pre-existing account —
+// idempotent per email, so re-running only creates whichever are missing.
+// Passwords are the intentionally simple "123456", changeable afterward via
+// Settings > Change Password.
+//   npx convex run seed:seedRbacRoster
+export const seedRbacRoster = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const results: { email: string; status: "created" | "already exists" }[] = [];
+    for (const account of RBAC_ROSTER) {
+      const existing = await ctx.runQuery(internal.seed.findUserByEmail, { email: account.email });
+      if (existing) {
+        results.push({ email: account.email, status: "already exists" });
+        continue;
+      }
+      await createAccount(ctx, {
+        provider: "password",
+        account: { id: account.email, secret: "123456" },
+        profile: {
+          email: account.email,
+          name: account.name,
+          role: account.role,
+          isActive: true,
+          createdAt: Date.now(),
+        },
+      });
+      results.push({ email: account.email, status: "created" });
+    }
+    return results;
+  },
+});
+
+export const findUserByEmail = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email))
+      .unique();
+  },
+});
+
 export const hasSuperAdmin = internalQuery({
   args: {},
   handler: async (ctx) => {

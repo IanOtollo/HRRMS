@@ -27,7 +27,7 @@ function DisciplinaryPageInner() {
 
   if (currentUser === undefined) return null;
 
-  if (currentUser?.role === "department_viewer") {
+  if (currentUser?.role !== "super_admin" && currentUser?.role !== "hr_director") {
     return (
       <div className="p-4 md:p-6">
         <ErrorState

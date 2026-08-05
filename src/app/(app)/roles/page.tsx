@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert, Plus, ShieldOff, Power, UserCog } from "lucide-react";
+import { ShieldAlert, Plus, ShieldOff, Power, UserCog, Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -168,7 +168,7 @@ export default function RolesPage() {
                   <td className="px-4 py-3 text-[12px] font-bold text-[#202b5d]">{u.name}</td>
                   <td className="px-4 py-3 text-[12px] text-slate-600">{u.email}</td>
                   <td className="px-4 py-3">
-                    {isSuperAdmin && u._id !== currentUser?._id ? (
+                    {isSuperAdmin && u._id !== currentUser?._id && u.role !== "ict_support" ? (
                       <div className="w-44">
                         <Select
                           value={u.role ?? ""}
@@ -191,13 +191,19 @@ export default function RolesPage() {
                   </td>
                   {isSuperAdmin && (
                     <td className="px-4 py-3">
-                      {u._id !== currentUser?._id && (
-                        <button
-                          onClick={() => setActive({ id: u._id, isActive: !u.isActive })}
-                          className="h-7 px-2.5 flex items-center gap-1 border border-slate-300 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                        >
-                          <Power size={12} /> {u.isActive ? "Deactivate" : "Activate"}
-                        </button>
+                      {u.role === "ict_support" ? (
+                        <span className="h-7 px-2.5 inline-flex items-center gap-1 text-[11px] font-bold text-slate-400" title="ICT Support's account cannot be deactivated">
+                          <Lock size={12} /> Protected
+                        </span>
+                      ) : (
+                        u._id !== currentUser?._id && (
+                          <button
+                            onClick={() => setActive({ id: u._id, isActive: !u.isActive })}
+                            className="h-7 px-2.5 flex items-center gap-1 border border-slate-300 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <Power size={12} /> {u.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                        )
                       )}
                     </td>
                   )}

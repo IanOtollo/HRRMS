@@ -8,7 +8,6 @@ export const list = query({
     const user = await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -40,7 +39,7 @@ export const logTraining = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "training.log", recordType: "trainingRecords" }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const employee = await ctx.db.get(args.employeeId);
       if (!employee) throw new ConvexError("Employee not found");
@@ -68,7 +67,7 @@ export const confirmAttendance = mutation({
   args: { id: v.id("trainingRecords") },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "training.confirmAttendance", recordType: "trainingRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Training record not found");
@@ -87,7 +86,7 @@ export const discardTraining = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "training.discard", recordType: "trainingRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Training record not found");
@@ -108,7 +107,7 @@ export const deferTraining = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "training.defer", recordType: "trainingRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Training record not found");
@@ -138,7 +137,7 @@ export const updateNotes = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "training.updateNotes", recordType: "trainingRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Training record not found");

@@ -8,7 +8,6 @@ export const list = query({
     const user = await requireRole(ctx, [
       "super_admin",
       "hr_director",
-      "records_officer",
       "department_viewer",
     ]);
 
@@ -55,7 +54,7 @@ export const initiateExit = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "exit.initiate", recordType: "exitRecords" }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const employee = await ctx.db.get(args.employeeId);
       if (!employee) throw new ConvexError("Employee not found");
@@ -83,7 +82,7 @@ export const updateNotes = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "exit.updateNotes", recordType: "exitRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Exit record not found");
@@ -102,7 +101,7 @@ export const advanceStage = mutation({
   },
   handler: async (ctx, args) => {
     return audited(ctx, { action: "exit.advanceStage", recordType: "exitRecords", recordId: args.id }, async () => {
-      await requireRole(ctx, ["super_admin", "hr_director", "records_officer"]);
+      await requireRole(ctx, ["super_admin", "hr_director"]);
 
       const record = await ctx.db.get(args.id);
       if (!record) throw new ConvexError("Exit record not found");

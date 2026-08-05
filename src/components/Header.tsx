@@ -18,15 +18,21 @@ type CurrentUser = {
 export default function Header({
   currentUser,
   onMenuClick,
+  onSignOut,
 }: {
   currentUser?: CurrentUser;
   onMenuClick?: () => void;
+  // Override for the default sign-out flow — used by /ict, which also needs
+  // to clear its own PIN-unlock flag on the way out.
+  onSignOut?: () => void | Promise<void>;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { signOut } = useAuthActions();
   const recordLogout = useMutation(api.users.recordLogout);
   const [searchQuery, setSearchQuery] = useState("");
+  // ICT Support never touches HR data — no employee search, no Add Employee.
+  const isIctSupport = currentUser?.role === "ict_support";
 
   const breadcrumbs = pathname
     .split("/")
@@ -41,6 +47,10 @@ export default function Header({
   };
 
   const handleSignOut = async () => {
+    if (onSignOut) {
+      await onSignOut();
+      return;
+    }
     await recordLogout({}).catch(() => {});
     await signOut();
     router.push("/login");
@@ -69,16 +79,18 @@ export default function Header({
           ))}
         </div>
 
-        <form onSubmit={handleSearch} className="relative min-w-0 flex-1 max-w-[360px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-          <input
-            type="text"
-            placeholder="Search name, P/F No, ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:border-transparent transition-all placeholder:text-text-secondary"
-          />
-        </form>
+        {!isIctSupport && (
+          <form onSubmit={handleSearch} className="relative min-w-0 flex-1 max-w-[360px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
+            <input
+              type="text"
+              placeholder="Search name, P/F No, ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-10 pl-10 pr-4 bg-paper-50 border border-paper-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-county-blue focus:border-transparent transition-all placeholder:text-text-secondary"
+            />
+          </form>
+        )}
       </div>
 
       <div className="flex items-center shrink-0 gap-3 sm:gap-4 md:gap-5">
@@ -86,13 +98,15 @@ export default function Header({
 
         <div className="hidden sm:block w-[1px] h-8 bg-paper-200" />
 
-        <Link
-          href="/employees/add"
-          className="h-10 px-2.5 sm:px-4 bg-county-blue hover:bg-[#0f345e] text-white text-sm font-medium rounded flex items-center transition-colors shadow-flat shrink-0"
-        >
-          <Plus size={16} className="sm:mr-1.5" />
-          <span className="hidden sm:inline">Add Employee</span>
-        </Link>
+        {!isIctSupport && (
+          <Link
+            href="/employees/add"
+            className="h-10 px-2.5 sm:px-4 bg-county-blue hover:bg-[#0f345e] text-white text-sm font-medium rounded flex items-center transition-colors shadow-flat shrink-0"
+          >
+            <Plus size={16} className="sm:mr-1.5" />
+            <span className="hidden sm:inline">Add Employee</span>
+          </Link>
+        )}
 
         <button
           onClick={handleSignOut}
