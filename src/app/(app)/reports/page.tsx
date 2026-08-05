@@ -176,7 +176,7 @@ function downloadStatsCsv(stats: any) {
   section("Retirement Forecast");
   for (const b of stats.retirementForecast) row(b.name, b.value);
 
-  section("Retiring Within 60 Days");
+  section("Upcoming Retirements (60 Days)");
   row("Employee", "PF Number", "Department", "Retirement Date", "Days Left");
   for (const r of stats.upcomingRetirements) row(r.name, r.pfNumber, r.department, r.retirementDate, r.daysLeft);
 
@@ -243,7 +243,7 @@ export default function ReportsPage() {
         stats={[
           { label: "Total Employees", value: stats.totalEmployees },
           { label: "Doc. Verification Rate", value: `${stats.documentVerificationRate}%`, accentClass: "text-emerald-600" },
-          { label: "Retiring ≤ 60 Days", value: stats.upcomingRetirements.length, accentClass: "text-amber-600" },
+          { label: "Upcoming Retirements", value: stats.upcomingRetirements.length, accentClass: "text-amber-600" },
           { label: "Open Disciplinary Cases", value: stats.openDisciplinaryCases, accentClass: "text-rust-700" },
         ]}
         action={
@@ -262,11 +262,11 @@ export default function ReportsPage() {
         <ChartCard title="Retirement Forecast (Active Employees)" icon={TrendingUp}>
           <HorizontalBar data={stats.retirementForecast} dataKey="value" nameKey="name" fill={SEQUENTIAL_AMBER} />
         </ChartCard>
-        <ChartCard title="Retiring Within 60 Days">
-          {stats.upcomingRetirements.length === 0 ? (
+        <ChartCard title="Retiring Within 30 Days">
+          {stats.upcomingRetirements.filter((r: any) => r.daysLeft <= 30).length === 0 ? (
             <div className="h-[240px] flex flex-col items-center justify-center text-slate-400 text-center px-6">
               <CalendarClock size={28} className="mb-2 opacity-20" />
-              <p className="text-[12px] font-medium">No one is retiring in the next 60 days</p>
+              <p className="text-[12px] font-medium">No one is retiring in the next 30 days</p>
               <p className="text-[11px] mt-1">Check the forecast chart alongside this for the fuller pipeline.</p>
             </div>
           ) : (
@@ -282,7 +282,7 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-paper-50">
-                  {stats.upcomingRetirements.map((r: any) => (
+                  {stats.upcomingRetirements.filter((r: any) => r.daysLeft <= 30).map((r: any) => (
                     <tr key={r.pfNumber}>
                       <td className="py-2 font-bold text-[#202b5d]">{r.name}</td>
                       <td className="py-2 text-slate-600 truncate max-w-[160px]">{r.department}</td>
