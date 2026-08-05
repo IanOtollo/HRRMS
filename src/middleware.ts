@@ -14,8 +14,10 @@ const isLoginPage = createRouteMatcher(["/login"]);
 // away, since logged-in users file tickets from here too.
 const isPublicPage = createRouteMatcher(["/login", "/support/new"]);
 // Reachable even while the site is blocked — ICT Support's own working area,
-// the public support/ticket surface, and the maintenance page itself.
-const isIctExempt = createRouteMatcher(["/ict", "/ict/(.*)", "/support", "/support/(.*)", "/maintenance"]);
+// the public support/ticket surface, the maintenance page itself, and /login
+// (without it, whoever blocked the site gets logged out — 5-minute idle
+// timeout included — and can never sign back in to lift the block).
+const isIctExempt = createRouteMatcher(["/ict", "/ict/(.*)", "/support", "/support/(.*)", "/maintenance", "/login"]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   if (!isIctExempt(request)) {
