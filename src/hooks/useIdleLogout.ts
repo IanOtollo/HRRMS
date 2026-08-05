@@ -6,10 +6,10 @@ import { useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 
-const IDLE_LIMIT_MS = 60 * 1000;
+const IDLE_LIMIT_MS = 3 * 60 * 1000;
 const ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
 
-// Signs an inactive session out after 1 minute with no interaction, rather
+// Signs an inactive session out after 3 minutes with no interaction, rather
 // than relying on the user remembering to log out or closing the tab —
 // protects against someone walking away from an unlocked, unattended
 // session on a shared HR workstation.
